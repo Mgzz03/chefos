@@ -1,0 +1,28 @@
+# Environment files — never commit
+.env
+*.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+backend/venv/
+backend/*.db
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vercel/
+
+# Claude Code internal files
+.claude/
+
+# Large zip / archive files
+*.zip
+*.rar
+*.7z
+
+# OS files
+.DS_Store
+Thumbs.db
