@@ -387,32 +387,11 @@ ${buildContext()}`
     setInput('')
     const newMsgs = [...messages, {role:'user',text:q}]
     setMessages(newMsgs); setThinking(true)
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:400,
-          system: SYSTEM,
-          messages: newMsgs.map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text})) })
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error.message)
-      setMessages(m=>[...m, {role:'ai', text:data.content?.[0]?.text||'No response'}])
-    } catch(e) {
-      // Offline fallback
-      const tl = q.toLowerCase()
-      let reply = ''
-      if (tl.includes('cook') || tl.includes('ready')) {
-        const ok = recipes.filter(r=>r.ings?.every(ri=>{const ing=ingredients.find(i=>i.id===ri.id);return ing&&ing.stock>=ri.qty}))
-        reply = ok.length ? `Ready to cook: ${ok.map(r=>r.name).join(', ')}` : 'No recipes fully stocked right now.'
-      } else if (tl.includes('cost') || tl.includes('expensive')) {
-        const costs = recipes.map(r=>{let c=0;r.ings?.forEach(ri=>{const ing=ingredients.find(i=>i.id===ri.id);if(ing)c+=ri.qty*ing.cost});return`${r.name}: EGP ${(c/r.base_yield).toFixed(2)}/unit`})
-        reply = costs.join(' · ')
-      } else {
-        reply = `I have ${recipes.length} recipes and ${ingredients.length} ingredients. (Assistant offline — check your connection for full answers.)`
-      }
-      setMessages(m=>[...m, {role:'ai', text:reply}])
-    }
-    setThinking(false)
+    const reply = mgzzAnswer(q, ingredients, recipes, [], [], [])
+    setTimeout(() => {
+      setMessages(m => [...m, { role: 'ai', text: reply }])
+      setThinking(false)
+    }, 300)
   }
 
   const suggestions = ['What can I cook now?','Most expensive recipe?','Any stock issues?','Scale to 20 portions?']
@@ -866,40 +845,25 @@ ${buildContext()}`
     setMessages(newMessages)
     setThinking(true)
 
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: SYSTEM_PROMPT,
-          messages: newMessages.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
-        })
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error.message || 'API error')
-      const aiText = data.content?.[0]?.text || 'I could not generate a response. Please rephrase.'
-      setMessages(m => [...m, { role: 'ai', text: aiText, time: new Date() }])
-    } catch (e) {
-      // Local fallback for offline / no-API scenarios
-      const fallback = generateLocalFallback(text, ingredients, recipes, items, events, alerts)
-      setMessages(m => [...m, { role: 'ai', text: fallback, time: new Date() }])
-    }
-    setThinking(false)
+    const answer = mgzzAnswer(text, ingredients, recipes, items, events, alerts)
+    setTimeout(() => {
+      setMessages(m => [...m, { role: 'ai', text: answer, time: new Date() }])
+      setThinking(false)
+    }, 300)
   }
 
   const formatTime = d => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
+  const exampleRecipe = recipes[0]?.name
   const quickActions = [
-    { icon: '🍳', title: 'What can I cook right now?', desc: 'See all dishes ready to make with current stock', q: 'What recipes can I cook right now with my current stock? List them with their costs.' },
-    { icon: '⚠️', title: 'What\'s urgent?', desc: 'Expiring items, out-of-stock alerts, things to handle today', q: 'What needs my immediate attention today? Cover expiring stock, out-of-stock items, and anything time-sensitive.' },
-    { icon: '💰', title: 'Cost analysis', desc: 'Most profitable dishes, expensive ingredients, waste', q: 'Give me a cost analysis: which recipes are most expensive per portion, which ingredients are driving up costs, and where am I losing money to waste?' },
-    { icon: '📋', title: 'Shopping list', desc: 'Exactly what to buy and how much', q: 'Build me a smart shopping list: what should I restock today based on low stock, threshold alerts, and what I need for my upcoming events?' },
-    { icon: '🎉', title: 'Plan an event', desc: 'Scale recipes, calculate cost, and ingredient list for guests', q: 'I need to plan an event for 50 guests with a 3-course menu. Help me pick dishes from my recipes, scale them, and calculate the total food cost.' },
-    { icon: '♻️', title: 'Use up what\'s expiring', desc: 'Suggest dishes that use ingredients about to expire', q: 'I have ingredients close to expiry. Suggest dishes I can make today that use them up before they go bad.' },
-    { icon: '🔄', title: 'Substitution help', desc: 'Swap ingredients when stock is low', q: 'Tell me which recipes are blocked because of out-of-stock ingredients, and suggest substitutions to make them work.' },
-    { icon: '📊', title: 'Menu engineering', desc: 'Pricing, food-cost %, profit margins', q: 'Help me with menu pricing. Based on my recipe costs, suggest sell prices that target 30% food cost, and identify which dishes are my high-margin stars.' },
+    { icon: '🍳', title: exampleRecipe ? `Make ${exampleRecipe} for 20` : 'Make a recipe for 20 people', desc: 'Scaled ingredients, cost, shopping list & steps', q: exampleRecipe ? `Make ${exampleRecipe} for 20 people` : 'Make a recipe for 20 people' },
+    { icon: '✅', title: 'What can I cook right now?', desc: 'Dishes ready to make with current stock', q: 'What can I cook right now?' },
+    { icon: '🎉', title: 'Plan an event for 50 guests', desc: 'Scale dishes, total cost, combined shopping list', q: 'Plan an event for 50 guests' },
+    { icon: '🛒', title: 'Build my shopping list', desc: 'Exactly what to restock and how much', q: 'Build my shopping list' },
+    { icon: '⚠️', title: 'What\'s urgent?', desc: 'Out of stock, low, and expiring items', q: "What's urgent?" },
+    { icon: '♻️', title: 'Use up what\'s expiring', desc: 'Recipes that use soon-to-expire stock', q: 'Use up my expiring ingredients' },
+    { icon: '💰', title: 'Which recipes cost the most?', desc: 'Cost per portion + suggested sell price', q: 'Which recipes cost the most per portion?' },
+    { icon: '📦', title: 'What\'s my inventory worth?', desc: 'Total stock value on hand', q: "What's my inventory worth?" },
   ]
 
   return (
@@ -931,8 +895,9 @@ ${buildContext()}`
               <div className="ai-empty-icon">✦</div>
               <div className="ai-empty-title">How can I help you, Chef?</div>
               <div className="ai-empty-sub">
-                I have live access to your kitchen — every ingredient, recipe, item, event, and alert.
-                Ask me anything from "what can I cook right now?" to "plan a 50-guest dinner with my Italian recipes."
+                I work from your real recipes, costs and live stock. Tell me a dish and a headcount —
+                like <b>"make {exampleRecipe || 'Pasta Carbonara'} for 20 people"</b> — and I'll give you the
+                exact ingredients, what to buy, the total cost, and step-by-step what to do.
               </div>
               <div className="ai-quick-actions">
                 {quickActions.map((a, i) => (
@@ -987,6 +952,257 @@ ${buildContext()}`
       </div>
     </div>
   )
+}
+
+// ═════════════════════════════════════════════════════════
+// MGZZ ASSISTANT — data-driven kitchen engine (exact, offline)
+// Uses the chef's real recipes, ingredient costs and live stock.
+// ═════════════════════════════════════════════════════════
+const _num = (n) => { const r = Math.round((n + Number.EPSILON) * 100) / 100; return String(r) }
+const _money = (n) => 'EGP ' + (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2)
+
+function _recipeCost(r, ingredients, scale = 1) {
+  let total = 0
+  for (const ri of (r.ings || [])) {
+    const ing = ingredients.find((i) => i.id === ri.id)
+    if (ing) total += ri.qty * scale * ing.cost
+  }
+  return total
+}
+
+function _findRecipe(q, recipes) {
+  const ql = ' ' + q.toLowerCase() + ' '
+  let best = null, bestLen = 0
+  for (const r of recipes) {
+    const n = (r.name || '').toLowerCase()
+    if (n && ql.includes(n) && n.length > bestLen) { best = r; bestLen = n.length }
+  }
+  if (best) return best
+  // word-overlap fallback (e.g. "carbonara" → "Pasta Carbonara")
+  const qWords = q.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2)
+  let bestScore = 0
+  for (const r of recipes) {
+    const nWords = (r.name || '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2)
+    const score = nWords.filter((w) => qWords.includes(w)).length
+    if (score > bestScore) { bestScore = score; best = r }
+  }
+  return bestScore ? best : null
+}
+
+function _extractCount(q) {
+  const m = q.toLowerCase().match(/(\d{1,5})\s*(people|persons?|ppl|guests?|portions?|servings?|pax|covers?)?/)
+  return m ? parseInt(m[1], 10) : null
+}
+
+function _recipeGuide(r, people, ingredients) {
+  const base = r.base_yield || 1
+  const target = people || base
+  const scale = target / base
+  const lines = [], shopping = [], prep = []
+  let total = 0, missing = false
+  for (const ri of (r.ings || [])) {
+    const ing = ingredients.find((i) => i.id === ri.id)
+    if (!ing) { lines.push('• (an ingredient is missing from your list)'); continue }
+    const need = ri.qty * scale
+    const cost = need * ing.cost
+    total += cost
+    const have = ing.stock || 0
+    const ok = have >= need
+    if (!ok) { missing = true; shopping.push(`• ${ing.name}: buy ${_num(need - have)} ${ri.unit}  (you have ${_num(have)})`) }
+    lines.push(`• ${ing.name} — ${_num(need)} ${ri.unit}  ·  ${_money(cost)}${ok ? '  ✓ in stock' : '  ⚠ short'}`)
+    prep.push(`${ing.name} ${_num(need)} ${ri.unit}`)
+  }
+  const per = target ? total / target : total
+  const out = []
+  out.push(`🍳  ${r.name} — for ${target} ${people ? 'people' : (r.yield_unit || 'portions')}`)
+  out.push(`(base recipe makes ${base} ${r.yield_unit || 'portions'}${people ? `, so we scale ×${_num(scale)}` : ''})`)
+  out.push('')
+  out.push('🧾  INGREDIENTS YOU NEED')
+  out.push(lines.join('\n') || '• (no ingredients recorded for this recipe)')
+  out.push('')
+  out.push('💰  COST')
+  out.push(`Total: ${_money(total)}  for ${target} ${r.yield_unit || 'portions'}`)
+  out.push(`Per person: ${_money(per)}`)
+  out.push(`Suggested sell price (30% food cost): ${_money(per / 0.30)} each`)
+  out.push('')
+  if (shopping.length) {
+    out.push('🛒  SHOPPING LIST (you\'re short on these)')
+    out.push(shopping.join('\n'))
+  } else {
+    out.push('🛒  SHOPPING LIST: ✓ You already have everything in stock — nothing to buy!')
+  }
+  out.push('')
+  out.push('👩‍🍳  STEP BY STEP')
+  let s = 1
+  if (shopping.length) out.push(`${s++}.  Buy the shopping-list items above.`)
+  out.push(`${s++}.  Mise en place — measure out: ${prep.join(', ')}.`)
+  if (r.notes && r.notes.trim()) out.push(`${s++}.  Method: ${r.notes.trim()}`)
+  else out.push(`${s++}.  Cook your way, combining the ingredients above in order.`)
+  out.push(`${s++}.  You'll get ${target} ${r.yield_unit || 'portions'} at ${_money(per)} each.`)
+  if (missing) out.push('\n💡  Tip: open Simulate to scale this exact recipe and auto-deduct the stock you used.')
+  return out.join('\n')
+}
+
+function _findAllRecipes(q, recipes) {
+  const ql = ' ' + q.toLowerCase() + ' '
+  return recipes.filter((r) => r.name && ql.includes(r.name.toLowerCase()))
+}
+
+function _eventPlan(dishes, people, ingredients) {
+  let grand = 0
+  const shop = {}
+  const per = []
+  for (const r of dishes) {
+    const scale = people / (r.base_yield || 1)
+    let rc = 0
+    for (const ri of (r.ings || [])) {
+      const ing = ingredients.find((i) => i.id === ri.id); if (!ing) continue
+      const need = ri.qty * scale
+      rc += need * ing.cost
+      if (!shop[ri.id]) shop[ri.id] = { name: ing.name, unit: ri.unit, need: 0, have: ing.stock || 0 }
+      shop[ri.id].need += need
+    }
+    grand += rc
+    per.push(`•  ${r.name} — ${people} ${r.yield_unit || 'portions'}  ·  ${_money(rc)}`)
+  }
+  const shopping = Object.values(shop).filter((s) => s.need > s.have).map((s) => `•  ${s.name}: buy ${_num(s.need - s.have)} ${s.unit}`)
+  const out = []
+  out.push(`🎉  Event plan — ${people} guests, ${dishes.length} dish${dishes.length > 1 ? 'es' : ''}`)
+  out.push('')
+  out.push('🍽️  DISHES (each scaled to your guest count)')
+  out.push(per.join('\n'))
+  out.push('')
+  out.push('💰  TOTAL FOOD COST')
+  out.push(`${_money(grand)}  ·  ${_money(grand / people)} per guest`)
+  out.push('')
+  if (shopping.length) { out.push('🛒  COMBINED SHOPPING LIST'); out.push(shopping.join('\n')) }
+  else out.push('🛒  You have everything in stock for this event!')
+  out.push('\n💡  Tip: build this on the Events page to track it and auto-deduct stock when you cook.')
+  return out.join('\n')
+}
+
+function mgzzAnswer(query, ingredients = [], recipes = [], items = [], events = [], alerts = []) {
+  const q = (query || '').toLowerCase().trim()
+  if (!q) return 'Ask me anything — e.g. "make Pasta Carbonara for 20 people".'
+
+  // Help
+  if (q === '?' || q.match(/^(help|what can you do|how do you work|commands?)\b/)) {
+    return ['I use your real recipes, costs and stock. Try:', '',
+      '•  "Make Pasta Carbonara for 20 people"  → ingredients, cost, shopping list & steps',
+      '•  "What can I cook right now?"',
+      '•  "How much does [recipe] cost?"',
+      '•  "What\'s urgent / expiring?"',
+      '•  "Build my shopping list"',
+      '•  "Which recipes are most expensive?"',
+      '•  "What recipes do I have?"'].join('\n')
+  }
+
+  // List recipes
+  if (q.match(/what recipes|list recipes|my recipes|recipes do i have|show recipes/)) {
+    if (!recipes.length) return 'You have no recipes yet — add some on the Recipes page.'
+    const lines = recipes.map((r) => { const c = _recipeCost(r, ingredients); return `•  ${r.name} — makes ${r.base_yield} ${r.yield_unit}, ${_money(c)} (${_money(c / (r.base_yield || 1))}/portion)` }).join('\n')
+    return `You have ${recipes.length} recipes:\n\n${lines}\n\nAsk "make [name] for N people" for a full plan.`
+  }
+
+  // ── Event / menu planning for N guests (multi-dish) ──
+  if (q.match(/event|menu|party|dinner|buffet|cater|banquet|wedding|reception/) && _extractCount(q)) {
+    const people = _extractCount(q)
+    const named = _findAllRecipes(q, recipes)
+    const dishes = named.length
+      ? named
+      : recipes.filter((r) => (r.ings || []).every((ri) => { const ing = ingredients.find((i) => i.id === ri.id); return ing && (ing.stock || 0) >= ri.qty })).slice(0, 4)
+    if (dishes.length) return _eventPlan(dishes, people, ingredients)
+    return `Tell me which dishes for your ${people}-guest event (e.g. "event for ${people}: Pasta Carbonara and Tiramisu"), or add recipes first on the Recipes page.`
+  }
+
+  // ── The big one: a specific recipe, scaled ──
+  const matched = _findRecipe(q, recipes)
+  if (matched && (_extractCount(q) || q.match(/make|cook|prepare|scale|recipe|how (much|do|to)|cost|need|ingredient|plan|for /))) {
+    return _recipeGuide(matched, _extractCount(q), ingredients)
+  }
+
+  // What can I cook now
+  if (q.match(/cook (now|right now|today)|what can i (cook|make)|ready to (cook|make)|recipes? .*(stock|ready)/)) {
+    const ready = recipes.filter((r) => (r.ings || []).every((ri) => { const ing = ingredients.find((i) => i.id === ri.id); return ing && (ing.stock || 0) >= ri.qty }))
+    if (!ready.length) return 'No recipes are fully stocked right now. Ask "build my shopping list" to see what to buy.'
+    const lines = ready.slice(0, 12).map((r) => { const c = _recipeCost(r, ingredients); return `•  ${r.name} — ${r.base_yield} ${r.yield_unit}, ${_money(c)} (${_money(c / (r.base_yield || 1))}/portion)` }).join('\n')
+    return `✅  Ready to cook now (${ready.length}):\n\n${lines}\n\nSay "make [name] for N people" for the full plan.`
+  }
+
+  // Use up what's expiring soon
+  if (q.match(/use up|going bad|use.*(expir|soon|before)|leftover|reduce waste|about to (go|expire)/)) {
+    const soon = ingredients.filter((i) => (i.batches || []).some((b) => {
+      if (!b.expiry_date) return false
+      const days = (new Date(b.expiry_date) - new Date()) / 86400000
+      return days >= 0 && days <= 7
+    }))
+    if (!soon.length) return '✓  Nothing is expiring in the next 7 days — no rush.'
+    const soonIds = new Set(soon.map((i) => i.id))
+    const usable = recipes.filter((r) => (r.ings || []).some((ri) => soonIds.has(ri.id)))
+    const a = soon.slice(0, 8).map((i) => `•  ${i.name}`).join('\n')
+    const b = usable.length ? usable.slice(0, 6).map((r) => `•  ${r.name}`).join('\n') : '(none of your recipes use these — consider a special)'
+    return `⏰  Expiring within 7 days:\n${a}\n\n🍳  Cook these to use them up:\n${b}`
+  }
+
+  // Urgent / alerts
+  if (q.match(/urgent|attention|alert|expir|critical|out of stock|low stock|running low/)) {
+    if (!alerts || !alerts.length) return "✓  Nothing urgent — everything's stocked and within its expiry window."
+    const lines = alerts.slice(0, 12).map((a) => {
+      if (a.type === 'out') return `•  ⚠ OUT: ${a.ingredient}`
+      if (a.type === 'low') return `•  🟡 LOW: ${a.ingredient} — ${a.stock} ${a.unit} left (threshold ${a.threshold})`
+      if (a.type === 'expired') return `•  🔴 EXPIRED: ${a.ingredient} — ${a.qty} ${a.unit}, do NOT use`
+      if (a.type === 'critical') return `•  🟠 EXPIRES ${a.expiry}: ${a.ingredient} — ${a.qty} ${a.unit}`
+      if (a.type === 'warning') return `•  🟡 ${a.ingredient} expiring ${a.expiry}`
+      return `•  ${a.ingredient}: ${a.type}`
+    }).join('\n')
+    return `Here's what needs attention (${alerts.length}):\n\n${lines}`
+  }
+
+  // Shopping list
+  if (q.match(/shop|restock|buy|grocery|order|what.*(need|low)/)) {
+    const low = ingredients.filter((i) => (i.stock || 0) <= (i.threshold || 0))
+    if (!low.length) return "✓  Everything's above its threshold — no restocking needed today."
+    const lines = low.slice(0, 15).map((i) => { const buy = Math.max(Math.ceil((i.threshold || 0) * 2 - (i.stock || 0)), 1); return `•  ${i.name}: have ${_num(i.stock || 0)} ${i.unit} (threshold ${i.threshold}) → buy ~${buy} ${i.unit}` }).join('\n')
+    return `🛒  Restock list (${low.length} items):\n\n${lines}\n\nLog new stock on Inventory → Restock.`
+  }
+
+  // Cost / pricing
+  if (q.match(/cost|expensive|cheap|profit|margin|price|pricing/)) {
+    const costed = recipes.map((r) => { const c = _recipeCost(r, ingredients); return { name: r.name, total: c, per: c / (r.base_yield || 1), unit: r.yield_unit } }).sort((a, b) => b.per - a.per)
+    if (!costed.length) return 'No recipes to analyse yet.'
+    const top = costed.slice(0, 8).map((c) => `•  ${c.name} — ${_money(c.per)}/portion (${_money(c.total)} total)`).join('\n')
+    return `💰  Cost per portion (highest first):\n\n${top}\n\nFor a 30% food cost, sell at about 3.3× the per-portion cost.`
+  }
+
+  // Inventory value
+  if (q.match(/inventory (value|worth)|stock.*(value|worth)|value of (my )?(inventory|stock)|how much.*(inventory|stock).*worth/)) {
+    const val = ingredients.reduce((s, i) => s + (i.stock || 0) * (i.cost || 0), 0)
+    const top = [...ingredients].map((i) => ({ name: i.name, v: (i.stock || 0) * (i.cost || 0) })).sort((a, b) => b.v - a.v).slice(0, 5)
+    const lines = top.map((t) => `•  ${t.name}: ${_money(t.v)}`).join('\n')
+    return `📦  Your inventory is worth ${_money(val)} across ${ingredients.length} ingredients.\n\nMost valuable on hand:\n${lines}`
+  }
+
+  // Blocked recipes — what's missing
+  if (q.match(/block|can.?t (cook|make)|why can|missing|not enough|short on/)) {
+    const blocked = recipes.map((r) => {
+      const short = (r.ings || []).filter((ri) => { const ing = ingredients.find((i) => i.id === ri.id); return !ing || (ing.stock || 0) < ri.qty })
+      return { r, short }
+    }).filter((x) => x.short.length)
+    if (!blocked.length) return "✓  No recipes are blocked — everything's makeable with current stock!"
+    const lines = blocked.slice(0, 8).map((x) => `•  ${x.r.name} — missing: ${x.short.map((ri) => { const ing = ingredients.find((i) => i.id === ri.id); return ing ? ing.name : '?' }).join(', ')}`).join('\n')
+    return `🚫  Blocked recipes (not enough stock):\n\n${lines}\n\nAsk "build my shopping list" to fix these.`
+  }
+
+  // A recipe was named but no clear intent → still give its plan
+  if (matched) return _recipeGuide(matched, _extractCount(q), ingredients)
+
+  // Default
+  return [`I can help with your ${recipes.length} recipes and ${ingredients.length} ingredients. Try:`, '',
+    '•  "Make [recipe] for 20 people"',
+    '•  "What can I cook right now?"',
+    '•  "What\'s urgent?"',
+    '•  "Build my shopping list"',
+    '•  "Which recipes cost the most?"'].join('\n')
 }
 
 // ─── Local fallback (offline mode or API failure) ─────────
