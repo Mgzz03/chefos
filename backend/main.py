@@ -1038,3 +1038,89 @@ def restock_from_cook(payload: dict, db: Session = Depends(get_db), user_id: str
         restocked.append({"name": ing.name, "qty": qty, "unit": ing.unit})
     db.commit()
     return {"ok": True, "restocked": restocked}
+
+
+# ═════════════════════════════════════════════════════════
+# MOBILE ACCESS (same-WiFi) — Step 3
+# The backend can serve the built frontend over the local network so a phone
+# on the same WiFi can use ChefOS. Access is OFF by default; when off, any
+# non-local client is refused (the port stays bound but serves nothing).
+# ═════════════════════════════════════════════════════════
+import sys as _sys
+import socket as _socket
+import json as _json
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+
+
+def _mobile_file_path() -> str:
+    db = os.environ.get("CHEFOS_DB_PATH")
+    base = os.path.dirname(db) if db else os.path.dirname(__file__)
+    return os.path.join(base, "mobile_access.json")
+
+
+def _mobile_enabled() -> bool:
+    try:
+        with open(_mobile_file_path()) as f:
+            return bool(_json.load(f).get("enabled", False))
+    except Exception:
+        return False
+
+
+def _set_mobile(enabled: bool) -> None:
+    try:
+        with open(_mobile_file_path(), "w") as f:
+            _json.dump({"enabled": bool(enabled)}, f)
+    except Exception:
+        pass
+
+
+def _local_ip() -> str:
+    s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+@app.middleware("http")
+async def _lan_guard(request: _Request, call_next):
+    client = request.client.host if request.client else "127.0.0.1"
+    is_local = client in ("127.0.0.1", "::1", "localhost")
+    if not is_local and not _mobile_enabled():
+        return _JSONResponse(
+            {"error": "Mobile access is turned off on the host computer."},
+            status_code=403,
+        )
+    return await call_next(request)
+
+
+@app.get("/mobile/status")
+def mobile_status():
+    port = int(os.environ.get("CHEFOS_PORT", "8000"))
+    return {"enabled": _mobile_enabled(), "ip": _local_ip(), "port": port,
+            "url": f"http://{_local_ip()}:{port}"}
+
+
+@app.post("/mobile/toggle")
+def mobile_toggle(body: dict):
+    _set_mobile(bool(body.get("enabled")))
+    return mobile_status()
+
+
+# ── Serve the built frontend so phones on the LAN can load the app ──
+def _frontend_dir():
+    if getattr(_sys, "frozen", False):
+        cand = os.path.join(getattr(_sys, "_MEIPASS", ""), "frontend_dist")
+    else:
+        cand = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    return cand if os.path.isdir(cand) else None
+
+
+_fe = _frontend_dir()
+if _fe:
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=_fe, html=True), name="frontend")

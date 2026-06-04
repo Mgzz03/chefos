@@ -2,7 +2,19 @@ import axios from 'axios'
 import { supabase } from './supabase'
 import { enqueue } from './offlineQueue'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Resolve where the API lives:
+//  - Phone on the LAN loaded the app over http://192.168.x.x:PORT → same origin.
+//  - Desktop Tauri webview (tauri.localhost) or dev (localhost) → configured URL.
+function resolveBaseUrl() {
+    if (typeof window !== 'undefined' && window.location) {
+        const { hostname, protocol, origin } = window.location
+        const desktopOrigin = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('tauri.localhost')
+        if (!desktopOrigin && (protocol === 'http:' || protocol === 'https:')) return origin
+    }
+    return import.meta.env.VITE_API_URL || 'http://localhost:8000'
+}
+
+const BASE_URL = resolveBaseUrl()
 const LOCAL = import.meta.env.VITE_LOCAL_MODE === 'true'
 
 const api = axios.create({ baseURL: BASE_URL })
@@ -64,6 +76,10 @@ export async function flushOfflineQueue() {
 export const getLicenseStatus  = ()    => api.get('/license/status')
 export const activateLicense   = (key) => api.post('/license/activate', { key })
 export const deactivateLicense = ()    => api.post('/license/deactivate')
+
+// ── Mobile access (same-WiFi) ─────────────────────────────
+export const getMobileStatus = ()        => api.get('/mobile/status')
+export const toggleMobile    = (enabled) => api.post('/mobile/toggle', { enabled })
 
 // ── Categories ────────────────────────────────────────────
 export const getCategories      = ()           => api.get('/categories')

@@ -49,6 +49,18 @@ def active_target() -> tuple[str, str]:
 def main() -> None:
     triple, ext = active_target()
 
+    # Bundle the built frontend so the backend can serve it over the LAN
+    # (Mobile Access). Build it first:  cd frontend && npm run build:desktop
+    dist = ROOT.parent / "frontend" / "dist"
+    add_data = []
+    if dist.is_dir():
+        sep = ";" if platform.system() == "Windows" else ":"
+        add_data = ["--add-data", f"{dist}{sep}frontend_dist"]
+        print(f"==> Bundling frontend from {dist}")
+    else:
+        print("!! WARNING: frontend/dist not found — Mobile Access won't serve the app.")
+        print("   Run `npm run build:desktop` in frontend/ first, then re-run this.")
+
     print(f"==> Building sidecar for {triple} ...")
     subprocess.run(
         [
@@ -57,6 +69,7 @@ def main() -> None:
             "--name", "chefos-backend",
             "--noconfirm",
             "--clean",
+            *add_data,
             # FastAPI/uvicorn/sqlalchemy/pydantic pull in modules dynamically;
             # collect them whole so nothing is missing at runtime.
             "--collect-all", "uvicorn",

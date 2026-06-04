@@ -29,7 +29,10 @@ pub fn run() {
                 .expect("chefos-backend sidecar is missing — run build_sidecar.py first")
                 .env("CHEFOS_LOCAL", "1")
                 .env("CHEFOS_DB_PATH", db_path.to_string_lossy().to_string())
-                .env("CHEFOS_HOST", "127.0.0.1")
+                // Bind to all interfaces so phones on the same WiFi can reach it.
+                // Access from non-local IPs is refused unless the chef enables
+                // Mobile Access in Settings (enforced in the backend).
+                .env("CHEFOS_HOST", "0.0.0.0")
                 .env("CHEFOS_PORT", "8000")
                 // License server URL, baked in at build time:
                 //   set CHEFOS_LICENSE_URL=https://chefos-license.<you>.workers.dev

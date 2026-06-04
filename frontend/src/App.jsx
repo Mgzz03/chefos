@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import * as api from './api'
 import { flushOfflineQueue } from './api'
 import { supabase } from './supabase'
+import QRCode from 'qrcode'
 import './index.css'
 
 // Local desktop build: no cloud login, talk straight to the bundled backend.
@@ -286,11 +287,26 @@ function ActivationScreen({ onActivated, info }) {
 // ─────────────────────────────────────────────────────────
 function SettingsPage({ licenseInfo, onDeactivate }) {
     const [info, setInfo] = useState(licenseInfo || {})
+    const [mobile, setMobile] = useState(null)
+    const [qr, setQr] = useState('')
+    const [mBusy, setMBusy] = useState(false)
     useEffect(() => {
         let alive = true
         api.getLicenseStatus().then(({ data }) => { if (alive) setInfo(data) }).catch(() => {})
+        api.getMobileStatus().then(({ data }) => { if (alive) setMobile(data) }).catch(() => {})
         return () => { alive = false }
     }, [])
+    useEffect(() => {
+        if (mobile && mobile.enabled && mobile.url) {
+            QRCode.toDataURL(mobile.url, { margin: 1, width: 210 }).then(setQr).catch(() => setQr(''))
+        } else setQr('')
+    }, [mobile])
+    const flipMobile = async () => {
+        setMBusy(true)
+        try { const { data } = await api.toggleMobile(!(mobile && mobile.enabled)); setMobile(data) }
+        catch (e) { console.error(e) }
+        setMBusy(false)
+    }
     const fmt = (u) => u ? new Date(u * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
     const Row = ({ label, value }) => (
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
@@ -315,6 +331,42 @@ function SettingsPage({ licenseInfo, onDeactivate }) {
                 <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12, marginTop: 10, marginBottom: 0 }}>
                     Deactivating frees this license so it can be used on another computer.
                 </p>
+            </div>
+
+            {/* ── Mobile Access (same-WiFi) ── */}
+            <div className="card" style={{ padding: 24, marginTop: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <h3 style={{ margin: 0 }}>Mobile Access
+                        <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-mute, #7a6f5a)', marginLeft: 6 }}>(same WiFi)</span>
+                    </h3>
+                    <button onClick={flipMobile} disabled={mBusy || !mobile}
+                        style={{ padding: '9px 15px', borderRadius: 9, border: 'none', fontWeight: 700, fontSize: 13,
+                                 cursor: mBusy || !mobile ? 'default' : 'pointer',
+                                 background: mobile && mobile.enabled ? '#1f7a32' : '#c0b6a0', color: '#fff' }}>
+                        {mobile && mobile.enabled ? '● Active — turn off' : '○ Inactive — turn on'}
+                    </button>
+                </div>
+
+                {mobile && mobile.enabled ? (
+                    <div style={{ marginTop: 18, textAlign: 'center' }}>
+                        <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
+                            On your phone or tablet, scan this code with the camera — or open the address below.
+                        </p>
+                        {qr && <img src={qr} alt="Scan to open ChefOS" width={210} height={210}
+                                    style={{ borderRadius: 12, border: '1px solid var(--line, #e3dcc4)' }} />}
+                        <div style={{ marginTop: 12, fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 17, fontWeight: 700 }}>
+                            {mobile.url}
+                        </div>
+                        <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12, marginTop: 8 }}>
+                            Make sure your phone is on the <b>same WiFi network</b> as this computer.
+                        </p>
+                    </div>
+                ) : (
+                    <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+                        Turn this on to use ChefOS from your phone or tablet on the same WiFi.
+                        While it's off, only this computer can reach your data.
+                    </p>
+                )}
             </div>
         </div>
     )

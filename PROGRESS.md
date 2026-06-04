@@ -102,8 +102,35 @@ All four parts built and **verified end-to-end against a local `wrangler dev`**:
 4. Launch ChefOS → activation screen → paste the key → it activates and never
    asks again on that device.
 
-## ⏳ STEP 3 — Same-WiFi mobile access   — NOT STARTED
-Bind backend to LAN, auto-detect local IP, Settings toggle + QR code.
+## ✅ STEP 3 — Same-WiFi mobile access   — BUILT & TESTED
+The backend serves the built frontend over the LAN so a phone/tablet on the same
+WiFi can use ChefOS. **OFF by default; access-controlled, not just hidden.**
+- Backend binds `0.0.0.0`; a middleware **refuses any non-local client unless
+  Mobile Access is enabled** (so turning it off truly locks out the LAN).
+- `/mobile/status` (auto-detects LAN IP + port + url), `/mobile/toggle`.
+- Frontend served via `StaticFiles` (bundled into the sidecar with
+  `--add-data frontend/dist`); `api.js` auto-targets same-origin when loaded from
+  a LAN IP, the configured URL inside the desktop webview.
+- **Settings → Mobile Access**: Active/Inactive toggle, the `http://<ip>:<port>`
+  address, and a **locally-generated QR code** (qrcode lib, no external service).
+- ✔ Tested: LAN blocked (403) while off; while on, phone can load the app (`/`)
+  and the API (`/categories`); toggling off re-locks the LAN.
+  Detected LAN IP `192.168.1.5`.
+
+> ⚠️ First time the app binds the LAN port, **Windows Firewall** may prompt —
+> click **Allow** (Private networks) so phones can connect.
+
+### To test (dev, no rebuild)
+```powershell
+cd C:\chefos\frontend ; npm run build:desktop          # dist the backend serves
+cd C:\chefos\backend
+$env:CHEFOS_LOCAL = "1"
+$env:CHEFOS_LICENSE_URL = "https://chefos-license.mohammedmagdy1912.workers.dev"
+$env:CHEFOS_HOST = "0.0.0.0"
+.\venv\Scripts\python.exe run_server.py
+```
+Open `http://localhost:8000` on the PC → Settings → Mobile Access → turn on →
+scan the QR with your phone (same WiFi).
 
 ## ⏳ STEP 4 — Data safety system   — NOT STARTED
 Auto local backups (30 days), manual export zip, restore, Google Drive OAuth backup.
