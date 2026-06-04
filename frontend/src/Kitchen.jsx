@@ -408,7 +408,7 @@ ${buildContext()}`
         const costs = recipes.map(r=>{let c=0;r.ings?.forEach(ri=>{const ing=ingredients.find(i=>i.id===ri.id);if(ing)c+=ri.qty*ing.cost});return`${r.name}: EGP ${(c/r.base_yield).toFixed(2)}/unit`})
         reply = costs.join(' · ')
       } else {
-        reply = `I have ${recipes.length} recipes and ${ingredients.length} ingredients. (AI offline — check your connection for full answers.)`
+        reply = `I have ${recipes.length} recipes and ${ingredients.length} ingredients. (Assistant offline — check your connection for full answers.)`
       }
       setMessages(m=>[...m, {role:'ai', text:reply}])
     }
@@ -420,8 +420,8 @@ ${buildContext()}`
   return (
     <div className="card" style={{display:'flex',flexDirection:'column',height:560,position:'sticky',top:'calc(var(--topbar-h) + 16px)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div className="card-title" style={{margin:0}}>✦ AI Kitchen Assistant</div>
-        {setPage && <button className="btn btn-sm" style={{fontSize:11,padding:'4px 10px'}} onClick={()=>setPage('ai')}>Open full AI ↗</button>}
+        <div className="card-title" style={{margin:0}}>✦ Mgzz Kitchen Assistant</div>
+        {setPage && <button className="btn btn-sm" style={{fontSize:11,padding:'4px 10px'}} onClick={()=>setPage('ai')}>Open full assistant ↗</button>}
       </div>
       <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,paddingBottom:8}}>
         {messages.map((m,i)=>(
@@ -920,7 +920,7 @@ ${buildContext()}`
             <button className="ai-suggest-btn" onClick={() => setPage('items')}>🍰 Open Items</button>
           </div>
           <div style={{ marginTop: 'auto', fontSize: 11, color: 'var(--ink-mute)', lineHeight: 1.5 }}>
-            <b>Powered by Claude.</b><br/>
+            <b>Powered by Mgzz's intelligence.</b><br/>
             ChefOS Assistant has full live access to your inventory, recipes, items, events, and alerts. Ask anything.
           </div>
         </aside>
@@ -1049,5 +1049,5 @@ function generateLocalFallback(query, ingredients, recipes, items, events, alert
   }
 
   // Default
-  return `I have ${recipes.length} recipes, ${ingredients.length} ingredients, ${items?.length||0} items, and ${events?.length||0} events to help with. The full AI is currently unreachable — try asking again in a moment, or check your internet connection. Common questions I can answer locally:\n\n• What can I cook now?\n• What's urgent?\n• Cost analysis\n• Shopping list / restock`
+  return `I have ${recipes.length} recipes, ${ingredients.length} ingredients, ${items?.length||0} items, and ${events?.length||0} events to help with. The assistant is currently unreachable — try asking again in a moment, or check your internet connection. Common questions I can answer locally:\n\n• What can I cook now?\n• What's urgent?\n• Cost analysis\n• Shopping list / restock`
 }

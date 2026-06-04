@@ -70,7 +70,7 @@ const NAV = [
     {
         label: 'Overview', items: [
             { id: 'dashboard', icon: '⬡', label: 'Dashboard' },
-            { id: 'ai', icon: '✦', label: 'AI Assistant' },
+            { id: 'ai', icon: '✦', label: 'Mgzz Assistant' },
         ]
     },
     {
@@ -708,7 +708,7 @@ export default function App() {
     const wasteCost = wasteLog.reduce((s, w) => s + (w.cost_lost || 0), 0)
 
     const pageTitles = {
-        dashboard: 'Dashboard', ai: 'AI Kitchen Assistant', recipes: 'Recipes', items: 'Items',
+        dashboard: 'Dashboard', ai: 'Mgzz Kitchen Assistant', recipes: 'Recipes', items: 'Items',
         simulate: 'Simulate', 'cooked-stock': 'Cooked Stock',
         history: 'Cook History', waste: 'Waste Log',
         inventory: 'Inventory', ingredients: 'Ingredients', categories: 'Categories',

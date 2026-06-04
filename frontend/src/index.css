@@ -1067,8 +1067,12 @@ input, select, textarea, button { font-family: var(--sans) }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   max-width: 1120px;
-  align-items: start;
+  align-items: stretch;   /* cards in the same row share equal height */
   padding-bottom: 40px;
+}
+.settings-grid > .card {
+  height: 100%;           /* fill the row height so the boxes match */
+  margin: 0;
 }
 @media (max-width: 860px) {
   .settings-grid { grid-template-columns: 1fr; }
