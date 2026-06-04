@@ -293,14 +293,50 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
     const [bks, setBks] = useState([])
     const [bMsg, setBMsg] = useState('')
     const fileRef = useRef(null)
+    const [gd, setGd] = useState(null)
+    const [gdFiles, setGdFiles] = useState([])
+    const [gdMsg, setGdMsg] = useState('')
+    const [gdBusy, setGdBusy] = useState(false)
     const loadBackups = () => api.listBackups().then(({ data }) => setBks(data.backups || [])).catch(() => {})
+    const loadGd = () => api.gdriveStatus().then(({ data }) => setGd(data)).catch(() => {})
     useEffect(() => {
         let alive = true
         api.getLicenseStatus().then(({ data }) => { if (alive) setInfo(data) }).catch(() => {})
         api.getMobileStatus().then(({ data }) => { if (alive) setMobile(data) }).catch(() => {})
         loadBackups()
+        loadGd()
         return () => { alive = false }
     }, [])
+
+    const gdConnect = async () => {
+        setGdBusy(true); setGdMsg('Opening Google sign-in in your browser…')
+        try { const { data } = await api.gdriveConnect(); setGdMsg(data.ok ? '✓ Connected' : `Error: ${data.error}`); if (data.ok) loadGd() }
+        catch { setGdMsg('Connection failed or timed out.') }
+        setGdBusy(false)
+    }
+    const gdDisconnect = async () => {
+        if (!window.confirm('Disconnect Google Drive? Your existing cloud backups stay in your Drive.')) return
+        await api.gdriveDisconnect().catch(() => {}); setGdFiles([]); setGdMsg(''); loadGd()
+    }
+    const gdBackup = async () => {
+        setGdBusy(true); setGdMsg('Uploading backup to Google Drive…')
+        try { const { data } = await api.gdriveBackupNow(); setGdMsg(data.ok ? '✓ Backed up to Google Drive' : `Error: ${data.error}`); if (data.ok) loadGd() }
+        catch { setGdMsg('Backup failed.') }
+        setGdBusy(false)
+    }
+    const gdLoadFiles = async () => {
+        setGdMsg('Loading cloud backups…')
+        try { const { data } = await api.gdriveList(); if (data.ok) { setGdFiles(data.files || []); setGdMsg(data.files && data.files.length ? '' : 'No cloud backups yet.') } else setGdMsg(`Error: ${data.error}`) }
+        catch { setGdMsg('Could not list Drive backups.') }
+    }
+    const gdRestore = async (id, name) => {
+        if (!window.confirm(`This will replace ALL current data with "${name}" from Google Drive. This cannot be undone.\n\nContinue?`)) return
+        setGdBusy(true); setGdMsg('Downloading & restoring…')
+        try { const { data } = await api.gdriveRestore(id); if (data.ok) { setGdMsg('✓ Restored. Reloading…'); await onReload(); loadBackups(); setGdMsg('✓ Restore complete.') } else setGdMsg(`Error: ${data.error}`) }
+        catch { setGdMsg('Restore failed.') }
+        setGdBusy(false)
+    }
+    const fmtDT = (u) => u ? new Date(u * 1000).toLocaleString() : 'never'
 
     const fileToB64 = (file) => new Promise((res, rej) => {
         const r = new FileReader()
@@ -438,6 +474,66 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
                             </div>
                         ))}
                 </div>
+            </div>
+
+            {/* ── Cloud Backup (Google Drive) ── */}
+            <div className="card" style={{ padding: 24, marginTop: 20, marginBottom: 40 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>Cloud Backup
+                    <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-mute, #7a6f5a)', marginLeft: 6 }}>(Google Drive)</span>
+                </h3>
+
+                {gd && !gd.configured ? (
+                    <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
+                        Google Drive backup isn't set up in this build. (Add your Google OAuth keys at build time — see GOOGLE_DRIVE_SETUP.md.)
+                    </p>
+                ) : !gd || !gd.connected ? (
+                    <>
+                        <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
+                            Automatically keep a copy of your data in your own Google Drive (last 7 uploads kept).
+                        </p>
+                        <button onClick={gdConnect} disabled={gdBusy}
+                            style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: gdBusy ? 'default' : 'pointer' }}>
+                            Connect Google Drive
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
+                            <span style={{ color: 'var(--ink-mute, #7a6f5a)' }}>Account</span><span style={{ fontWeight: 600 }}>{gd.email || 'connected'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
+                            <span style={{ color: 'var(--ink-mute, #7a6f5a)' }}>Last cloud backup</span><span style={{ fontWeight: 600 }}>{fmtDT(gd.last_upload)}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                            <button onClick={gdBackup} disabled={gdBusy}
+                                style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#1f7a32', color: '#fff', fontWeight: 600, cursor: gdBusy ? 'default' : 'pointer' }}>
+                                Backup Now
+                            </button>
+                            <button onClick={gdLoadFiles} disabled={gdBusy}
+                                style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #6C0B25', background: 'transparent', color: '#6C0B25', fontWeight: 600, cursor: gdBusy ? 'default' : 'pointer' }}>
+                                Restore from Google Drive…
+                            </button>
+                            <button onClick={gdDisconnect} disabled={gdBusy}
+                                style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, cursor: gdBusy ? 'default' : 'pointer' }}>
+                                Disconnect
+                            </button>
+                        </div>
+                        {gdFiles.length > 0 && (
+                            <div style={{ marginTop: 14, maxHeight: 230, overflow: 'auto' }}>
+                                {gdFiles.map((f) => (
+                                    <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
+                                        <span>{f.name} <span style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12 }}>· {f.size ? (f.size / 1024).toFixed(0) + ' KB' : ''}</span></span>
+                                        <button onClick={() => gdRestore(f.id, f.name)}
+                                            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                                            Restore
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+                {gdMsg && <div style={{ fontSize: 13, padding: '8px 12px', background: 'var(--cream, #faf7e7)', borderRadius: 8, marginTop: 12, wordBreak: 'break-all' }}>{gdMsg}</div>}
             </div>
         </div>
     )

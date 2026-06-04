@@ -37,7 +37,10 @@ pub fn run() {
                 // License server URL, baked in at build time:
                 //   set CHEFOS_LICENSE_URL=https://chefos-license.<you>.workers.dev
                 // before `npm run tauri build`.
-                .env("CHEFOS_LICENSE_URL", option_env!("CHEFOS_LICENSE_URL").unwrap_or(""));
+                .env("CHEFOS_LICENSE_URL", option_env!("CHEFOS_LICENSE_URL").unwrap_or(""))
+                // Google Drive OAuth client (baked at build time), for cloud backup:
+                .env("CHEFOS_GOOGLE_CLIENT_ID", option_env!("CHEFOS_GOOGLE_CLIENT_ID").unwrap_or(""))
+                .env("CHEFOS_GOOGLE_CLIENT_SECRET", option_env!("CHEFOS_GOOGLE_CLIENT_SECRET").unwrap_or(""));
 
             let (mut rx, child) = sidecar.spawn().expect("failed to start ChefOS backend");
 

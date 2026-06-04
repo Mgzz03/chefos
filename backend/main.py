@@ -11,6 +11,8 @@ from auth import get_current_user
 from bootstrap import ensure_local_schema
 import license_client
 import backups
+import gdrive
+import threading
 from models import (Category, Ingredient, InventoryBatch, Recipe, RecipeIngredient,
                     Vendor, SetupItem, Event, EventRecipe, EventSetupItem, Transaction,
                     CookedStock, Item, ItemSubRecipe, ItemIngredient, WasteLog)
@@ -29,6 +31,8 @@ from schemas import (CategoryCreate, CategoryOut,
 ensure_local_schema(engine)        # patch older local DBs before create_all
 Base.metadata.create_all(bind=engine)
 backups.auto_backup()              # daily local snapshot on startup (keep last 30)
+# Google Drive: upload in the background if >24h since the last cloud backup.
+threading.Thread(target=gdrive.auto_backup_if_due, daemon=True).start()
 
 app = FastAPI(title="ChefOS API v2")
 
@@ -92,6 +96,37 @@ def backup_restore(body: dict):
 @app.post("/backup/restore-upload")
 def backup_restore_upload(body: dict):
     return backups.restore_from_zip_b64(body.get("zip_b64", ""))
+
+
+# ── Google Drive cloud backup ──────────────────────────────
+@app.get("/gdrive/status")
+def gdrive_status():
+    return gdrive.status()
+
+
+@app.post("/gdrive/connect")
+def gdrive_connect():
+    return gdrive.connect()
+
+
+@app.post("/gdrive/disconnect")
+def gdrive_disconnect():
+    return gdrive.disconnect()
+
+
+@app.post("/gdrive/backup-now")
+def gdrive_backup_now():
+    return gdrive.backup_now()
+
+
+@app.get("/gdrive/list")
+def gdrive_list():
+    return gdrive.list_drive()
+
+
+@app.post("/gdrive/restore")
+def gdrive_restore(body: dict):
+    return gdrive.restore_drive(body.get("file_id", ""))
 
 # ─────────────────────────────────────────────────────────
 # HELPERS

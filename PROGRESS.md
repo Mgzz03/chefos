@@ -132,8 +132,24 @@ $env:CHEFOS_HOST = "0.0.0.0"
 Open `http://localhost:8000` on the PC → Settings → Mobile Access → turn on →
 scan the QR with your phone (same WiFi).
 
-## ⏳ STEP 4 — Data safety system   — NOT STARTED
-Auto local backups (30 days), manual export zip, restore, Google Drive OAuth backup.
+## ✅ STEP 4 — Data safety system   — BUILT & TESTED
+All four layers in Settings:
+- **Layer 1 — auto local backups** (`backups.py`): daily snapshot on startup to
+  `AppData/ChefOS/backups/chefos_YYYY-MM-DD.db`, last 30 kept, skips if today's
+  exists. ✔ tested.
+- **Layer 2 — export**: "Export Backup → Desktop" → `ChefOS_Backup_YYYY-MM-DD.zip`
+  (finds OneDrive Desktop too), shows the saved path. ✔ tested.
+- **Layer 3 — restore**: list of daily snapshots each with Restore, plus
+  "Restore from a .zip file" picker. Takes a `.pre-restore` safety copy first,
+  disposes the engine, swaps the db, reloads the app. ✔ tested (9→8 categories).
+- **Layer 4 — Google Drive** (`gdrive.py`, stdlib OAuth loopback + Drive REST):
+  Connect/Disconnect, account email, last-upload time, **Backup Now**, automatic
+  upload every 24h on startup (background thread), keep last 7, **Restore from
+  Google Drive**. Token stored encrypted (fingerprint-bound). ✔ endpoints tested;
+  the live OAuth needs your Google keys — see **`GOOGLE_DRIVE_SETUP.md`**.
+
+> Drive needs build-time keys `CHEFOS_GOOGLE_CLIENT_ID` / `CHEFOS_GOOGLE_CLIENT_SECRET`
+> (baked via Tauri). Until set, the Cloud Backup card shows "not set up in this build".
 
 ---
 

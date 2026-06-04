@@ -87,6 +87,14 @@ export const exportBackup  = ()        => api.post('/backup/export')
 export const restoreBackup = (name)    => api.post('/backup/restore', { name })
 export const restoreUpload = (zip_b64) => api.post('/backup/restore-upload', { zip_b64 })
 
+// ── Google Drive cloud backup ─────────────────────────────
+export const gdriveStatus     = ()        => api.get('/gdrive/status')
+export const gdriveConnect    = ()        => api.post('/gdrive/connect', {}, { timeout: 200000 })
+export const gdriveDisconnect = ()        => api.post('/gdrive/disconnect')
+export const gdriveBackupNow  = ()        => api.post('/gdrive/backup-now', {}, { timeout: 130000 })
+export const gdriveList       = ()        => api.get('/gdrive/list')
+export const gdriveRestore    = (file_id) => api.post('/gdrive/restore', { file_id }, { timeout: 130000 })
+
 // ── Categories ────────────────────────────────────────────
 export const getCategories      = ()           => api.get('/categories')
 export const createCategory     = (data)       => api.post('/categories', data)
