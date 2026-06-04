@@ -1,0 +1,8 @@
+# Rust build output
+/target
+
+# Tauri-generated schemas
+/gen/schemas
+
+# Built sidecar binaries (regenerated per-platform by build_sidecar.py)
+/binaries/chefos-backend*

@@ -4,6 +4,9 @@ import { flushOfflineQueue } from './api'
 import { supabase } from './supabase'
 import './index.css'
 
+// Local desktop build: no cloud login, talk straight to the bundled backend.
+const LOCAL = import.meta.env.VITE_LOCAL_MODE === 'true'
+
 // ── Code-split heavy page modules (loaded on first visit) ─
 const Recipes        = lazy(() => import('./Kitchen').then(m => ({ default: m.Recipes })))
 const Simulate       = lazy(() => import('./Kitchen').then(m => ({ default: m.Simulate })))
@@ -224,8 +227,14 @@ export default function App() {
         setLoading(false)
     }, [])
 
-    // ── Supabase auth listener ────────────────────────────
+    // ── Auth listener ─────────────────────────────────────
     useEffect(() => {
+        if (LOCAL) {
+            // Local desktop: no login. Behave as a single signed-in chef.
+            setSession({ user: { email: 'Local Chef' } })
+            setAuthReady(true)
+            return
+        }
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session); setAuthReady(true)
         })
@@ -235,7 +244,23 @@ export default function App() {
         return () => subscription.unsubscribe()
     }, [])
 
-    useEffect(() => { if (session) reload() }, [session])
+    // ── First load — in local mode wait for the bundled backend to boot ──
+    useEffect(() => {
+        if (!session) return
+        let cancelled = false
+        const boot = async () => {
+            if (LOCAL) {
+                const base = import.meta.env.VITE_API_URL || ''
+                for (let i = 0; i < 40 && !cancelled; i++) {
+                    try { await fetch(`${base}/health`); break }
+                    catch { await new Promise(r => setTimeout(r, 500)) }
+                }
+            }
+            if (!cancelled) reload()
+        }
+        boot()
+        return () => { cancelled = true }
+    }, [session, reload])
 
     // ── Online / offline + sync queue ─────────────────────
     useEffect(() => {
@@ -256,9 +281,9 @@ export default function App() {
         }
     }, [reload])
 
-    // ── Supabase Realtime — live cross-device sync ─────────
+    // ── Supabase Realtime — live cross-device sync (cloud only) ─
     useEffect(() => {
-        if (!session) return
+        if (LOCAL || !session) return
         let debounce
         const trigger = () => { clearTimeout(debounce); debounce = setTimeout(reload, 600) }
 
@@ -295,6 +320,7 @@ export default function App() {
     }
 
     const handleLogout = async () => {
+        if (LOCAL) return   // local desktop has no login to sign out of
         await supabase.auth.signOut()
         setSession(null)
     }

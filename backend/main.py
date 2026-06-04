@@ -8,6 +8,7 @@ import uuid
 
 from database import engine, get_db, Base
 from auth import get_current_user
+from bootstrap import ensure_local_schema
 from models import (Category, Ingredient, InventoryBatch, Recipe, RecipeIngredient,
                     Vendor, SetupItem, Event, EventRecipe, EventSetupItem, Transaction,
                     CookedStock, Item, ItemSubRecipe, ItemIngredient, WasteLog)
@@ -23,12 +24,19 @@ from schemas import (CategoryCreate, CategoryOut,
                      ItemCreate, ItemOut, AssembleRequest,
                      WasteCreate, WasteOut, CookToStockRequest)
 
+ensure_local_schema(engine)        # patch older local DBs before create_all
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="ChefOS API v2")
 
-_raw_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-CORS_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+# Local desktop build: the webview origin is tauri://localhost (and the phone
+# uses the LAN IP), so allow all origins. The server only binds to the local
+# machine, so this is safe. Cloud build keeps an explicit allow-list.
+if os.environ.get("CHEFOS_LOCAL") == "1":
+    CORS_ORIGINS = ["*"]
+else:
+    _raw_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    CORS_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +44,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Health check (no auth) — the desktop shell polls this to know the
+#    bundled backend has finished booting before loading the UI ──────
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 # ─────────────────────────────────────────────────────────
 # HELPERS

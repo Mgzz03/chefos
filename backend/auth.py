@@ -1,17 +1,34 @@
 import os
-import jwt as pyjwt
+from typing import Optional
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-security = HTTPBearer()
+# auto_error=False so a missing Authorization header does NOT 403 in local mode
+security = HTTPBearer(auto_error=False)
+
+LOCAL_USER_ID = "local"
+
+
+def _is_local() -> bool:
+    """Local desktop mode: license activation is the gate, not a login token."""
+    return os.environ.get("CHEFOS_LOCAL") == "1" or not os.environ.get("SUPABASE_JWT_SECRET")
+
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> str:
+    # ── Local desktop build — single chef, no cloud login ──
+    if _is_local():
+        return LOCAL_USER_ID
+
+    # ── Cloud build — verify a Supabase JWT (kept for completeness) ──
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing credentials")
+
+    import jwt as pyjwt  # lazy import so the local sidecar doesn't bundle PyJWT
+
     token = credentials.credentials
     secret = os.environ.get("SUPABASE_JWT_SECRET", "")
-    if not secret:
-        raise HTTPException(status_code=500, detail="JWT secret not configured")
     try:
         payload = pyjwt.decode(
             token,

@@ -10,13 +10,26 @@ __pycache__/
 backend/venv/
 backend/*.db
 
+# PyInstaller (sidecar build artifacts)
+backend/build/
+backend/dist/
+backend/*.spec
+
 # Node
 node_modules/
 frontend/dist/
 frontend/.vercel/
 
+# Tauri / Rust build output
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+frontend/src-tauri/binaries/chefos-backend*
+
 # Claude Code internal files
 .claude/
+
+# Editor
+.vscode/
 
 # Large zip / archive files
 *.zip

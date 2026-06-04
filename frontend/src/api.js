@@ -3,14 +3,17 @@ import { supabase } from './supabase'
 import { enqueue } from './offlineQueue'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const LOCAL = import.meta.env.VITE_LOCAL_MODE === 'true'
 
 const api = axios.create({ baseURL: BASE_URL })
 
-// ── Attach Supabase JWT to every request ──────────────────
+// ── Attach Supabase JWT to every request (cloud build only) ─
 api.interceptors.request.use(async config => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.access_token) {
-        config.headers.Authorization = `Bearer ${session.access_token}`
+    if (!LOCAL && supabase) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+            config.headers.Authorization = `Bearer ${session.access_token}`
+        }
     }
     return config
 })
