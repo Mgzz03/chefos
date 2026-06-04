@@ -174,7 +174,7 @@ def _find_or_create_folder(at):
 def _list_files(at, folder):
     q = urllib.parse.quote(f"'{folder}' in parents and trashed=false")
     res = _http(f"https://www.googleapis.com/drive/v3/files?q={q}"
-                f"&fields=files(id,name,createdTime,size)&orderBy=createdTime desc",
+                f"&fields=files(id,name,createdTime,size)&orderBy=createdTime%20desc",
                 headers={"Authorization": "Bearer " + at})
     return res.get("files", [])
 
