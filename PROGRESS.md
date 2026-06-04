@@ -32,10 +32,33 @@ gate. The old cloud code still exists in git history if ever needed.
 - Sidecar build pipeline: `backend/build_sidecar.py` (PyInstaller → correct
   Tauri target-triple filename).
 
-**Needs YOUR machine to finish (native build — I can't run it here):**
-- Install Rust + MS C++ Build Tools, then run the build (see `STEP1_BUILD_GUIDE.md`).
-- Generate the app icons (`npm run tauri icon <logo.png>`) — chef-hat if you have one.
-- Run `npm run tauri build` to produce the `.msi`/`.exe` installer.
+**Tier 2 (real .exe) — ✅ DONE. Installer built.**
+- ✔ PyInstaller; backend frozen into `chefos-backend-*.exe`, verified running standalone.
+- ✔ Tauri CLI 2.11.2; app icons (chef-hat) generated.
+- ✔ Toolchain: **Rust 1.96 GNU** (`stable-x86_64-pc-windows-gnu`) + **WinLibs MinGW-w64**
+  (MSVCRT). MSVC Build Tools could NOT be installed headlessly (GUI installer dies),
+  so we use the GNU toolchain instead.
+- ✔ Built artifacts:
+  - `src-tauri/target/release/ChefOS.exe`
+  - `src-tauri/target/release/bundle/msi/ChefOS_1.0.0_x64_en-US.msi`
+  - `src-tauri/target/release/bundle/nsis/ChefOS_1.0.0_x64-setup.exe`
+
+### ⚙️ How to rebuild the .exe (IMPORTANT for future steps)
+The machine has **McAfee + Reason Cybersecurity**, which block the compiler. Folder
+exclusions were added for: `C:\Users\Asus\.rustup`, `.cargo`,
+`AppData\Local\Microsoft\WinGet\Packages`, and `C:\chefos`. Keep those exclusions.
+
+To rebuild (e.g. after Steps 2–4 change code):
+```
+# 1. rebuild the backend sidecar (names itself for the active rust target = -gnu)
+cd C:\chefos\backend
+.\venv\Scripts\python.exe build_sidecar.py
+# 2. build the app (WinLibs + cargo must be on PATH — both are on the user PATH now)
+cd C:\chefos\frontend
+npm run tauri build
+```
+If a build fails with `collect2 / Access is denied / CreateProcess`, the AV is
+interfering again — confirm the exclusions are still active (or pause real-time).
 
 **Skipped / notes:**
 - Mac `.dmg` supported by the same config but can only be built *on a Mac*.

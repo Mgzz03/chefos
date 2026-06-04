@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 
-# (system, machine) -> (rust target triple, exe extension)
+# Fallback mapping if rustc isn't on PATH: (system, machine) -> (triple, ext)
 TRIPLES = {
     ("Windows", "AMD64"):  ("x86_64-pc-windows-msvc",   ".exe"),
     ("Windows", "ARM64"):  ("aarch64-pc-windows-msvc",  ".exe"),
@@ -29,11 +29,25 @@ TRIPLES = {
 }
 
 
-def main() -> None:
+def active_target() -> tuple[str, str]:
+    """Use the active rustc host triple so the sidecar name matches the Tauri
+    build target exactly (msvc vs gnu matters). Fall back to a static map."""
+    ext = ".exe" if platform.system() == "Windows" else ""
+    try:
+        out = subprocess.run(["rustc", "-vV"], capture_output=True, text=True, check=True).stdout
+        for line in out.splitlines():
+            if line.startswith("host:"):
+                return line.split(":", 1)[1].strip(), ext
+    except Exception:
+        pass
     key = (platform.system(), platform.machine())
     if key not in TRIPLES:
-        sys.exit(f"Unsupported platform {key}. Add it to TRIPLES in build_sidecar.py.")
-    triple, ext = TRIPLES[key]
+        sys.exit(f"Unsupported platform {key} and rustc not found. Edit build_sidecar.py.")
+    return TRIPLES[key]
+
+
+def main() -> None:
+    triple, ext = active_target()
 
     print(f"==> Building sidecar for {triple} ...")
     subprocess.run(

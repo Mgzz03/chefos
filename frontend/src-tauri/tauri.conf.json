@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/chefos-backend"],
-    "resources": []
+    "resources": ["WebView2Loader.dll"]
   },
   "plugins": {}
 }
