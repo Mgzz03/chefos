@@ -39,3 +39,6 @@ frontend/src-tauri/binaries/chefos-backend*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local dev launcher (contains keys)
+run-local.ps1
