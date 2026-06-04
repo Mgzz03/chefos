@@ -389,7 +389,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
         </div>
     )
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20, maxWidth: 1120, alignItems: 'start', paddingBottom: 40 }}>
+        <div className="settings-grid">
             <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 8 }}>License &amp; Activation</h3>
                 <Row label="Status" value={info.activated ? 'Activated ✓' : 'Not activated'} />
