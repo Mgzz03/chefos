@@ -389,7 +389,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
         </div>
     )
     return (
-        <div style={{ maxWidth: 640 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20, maxWidth: 1120, alignItems: 'start', paddingBottom: 40 }}>
             <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 8 }}>License &amp; Activation</h3>
                 <Row label="Status" value={info.activated ? 'Activated ✓' : 'Not activated'} />
@@ -408,7 +408,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
             </div>
 
             {/* ── Mobile Access (same-WiFi) ── */}
-            <div className="card" style={{ padding: 24, marginTop: 20 }}>
+            <div className="card" style={{ padding: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                     <h3 style={{ margin: 0 }}>Mobile Access
                         <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-mute, #7a6f5a)', marginLeft: 6 }}>(same WiFi)</span>
@@ -444,7 +444,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
             </div>
 
             {/* ── Backups ── */}
-            <div className="card" style={{ padding: 24, marginTop: 20 }}>
+            <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 6 }}>Backups</h3>
                 <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
                     A backup is saved automatically every day (the last 30 are kept).
@@ -477,7 +477,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
             </div>
 
             {/* ── Cloud Backup (Google Drive) ── */}
-            <div className="card" style={{ padding: 24, marginTop: 20, marginBottom: 40 }}>
+            <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 6 }}>Cloud Backup
                     <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-mute, #7a6f5a)', marginLeft: 6 }}>(Google Drive)</span>
                 </h3>
