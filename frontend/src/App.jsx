@@ -285,11 +285,26 @@ function ActivationScreen({ onActivated, info }) {
 // ─────────────────────────────────────────────────────────
 // SETTINGS PAGE  (License now; Mobile Access + Backups added in later steps)
 // ─────────────────────────────────────────────────────────
-function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
+function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandingChange }) {
     const [info, setInfo] = useState(licenseInfo || {})
     const [mobile, setMobile] = useState(null)
     const [qr, setQr] = useState('')
     const [mBusy, setMBusy] = useState(false)
+    const [bName, setBName] = useState((branding && branding.name) || '')
+    const [bLogo, setBLogo] = useState((branding && branding.logo) || '')
+    const [brandMsg, setBrandMsg] = useState('')
+    const logoRef = useRef(null)
+    useEffect(() => { setBName((branding && branding.name) || ''); setBLogo((branding && branding.logo) || '') }, [branding])
+    const onLogoPick = (e) => {
+        const f = e.target.files[0]; if (!f) return
+        if (f.size > 400000) { setBrandMsg('Logo too large — use an image under 400 KB.'); e.target.value = ''; return }
+        const r = new FileReader(); r.onload = () => setBLogo(String(r.result)); r.readAsDataURL(f); e.target.value = ''
+    }
+    const saveBrand = async () => {
+        setBrandMsg('Saving…')
+        try { const { data } = await api.setBranding({ name: bName.trim(), logo: bLogo }); onBrandingChange(data); setBrandMsg('✓ Saved') }
+        catch { setBrandMsg('Save failed.') }
+    }
     const [bks, setBks] = useState([])
     const [bMsg, setBMsg] = useState('')
     const fileRef = useRef(null)
@@ -389,7 +404,34 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
         </div>
     )
     return (
-        <div className="settings-grid">
+        <div style={{ maxWidth: 1120 }}>
+            {/* ── Brand (restaurant name + logo) ── */}
+            <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>Brand</h3>
+                <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
+                    Personalise the app with your kitchen's name and logo (shown in the sidebar).
+                </p>
+                <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 12, border: '1px solid var(--line, #e3dcc4)', background: 'var(--cream, #faf7e7)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                        {bLogo ? <img src={bLogo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 26 }}>🍳</span>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-mute, #7a6f5a)', textTransform: 'uppercase', letterSpacing: .6, marginBottom: 6 }}>Restaurant / kitchen name</label>
+                        <input value={bName} onChange={(e) => setBName(e.target.value)} placeholder="e.g. Mgzz Kitchen"
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: 'var(--cream, #faf7e7)', color: 'var(--ink, #2E1A0E)', fontSize: 14 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <button onClick={() => logoRef.current && logoRef.current.click()}
+                            style={{ padding: '10px 14px', borderRadius: 9, border: '1px solid #6C0B25', background: 'transparent', color: '#6C0B25', fontWeight: 600, cursor: 'pointer' }}>Upload logo…</button>
+                        {bLogo && <button onClick={() => setBLogo('')} style={{ padding: '10px 14px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, cursor: 'pointer' }}>Remove</button>}
+                        <button onClick={saveBrand} style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                        <input ref={logoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onLogoPick} />
+                    </div>
+                </div>
+                {brandMsg && <div style={{ fontSize: 13, marginTop: 12 }}>{brandMsg}</div>}
+            </div>
+
+            <div className="settings-grid">
             <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 8 }}>License &amp; Activation</h3>
                 <Row label="Status" value={info.activated ? 'Activated ✓' : 'Not activated'} />
@@ -535,6 +577,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
                 )}
                 {gdMsg && <div style={{ fontSize: 13, padding: '8px 12px', background: 'var(--cream, #faf7e7)', borderRadius: 8, marginTop: 12, wordBreak: 'break-all' }}>{gdMsg}</div>}
             </div>
+            </div>
         </div>
     )
 }
@@ -565,6 +608,7 @@ export default function App() {
     const [licenseReady, setLicenseReady] = useState(!LOCAL)
     const [licensed, setLicensed]         = useState(!LOCAL)
     const [licenseInfo, setLicenseInfo]   = useState(null)
+    const [branding, setBranding]         = useState({ name: '', logo: '' })
 
     const reload = useCallback(async () => {
         try {
@@ -668,6 +712,21 @@ export default function App() {
         return () => { clearTimeout(debounce); supabase.removeChannel(channel) }
     }, [session, reload])
 
+    // Load restaurant branding once past the gate
+    useEffect(() => {
+        if (!session || (LOCAL && !licensed)) return
+        api.getBranding().then(({ data }) => {
+            setBranding(data || { name: '', logo: '' })
+            if (data && data.name) localStorage.setItem('chefos_brand', data.name)
+        }).catch(() => {})
+    }, [session, licensed])
+
+    const applyBranding = (b) => {
+        setBranding(b)
+        if (b && b.name) localStorage.setItem('chefos_brand', b.name)
+        else localStorage.removeItem('chefos_brand')
+    }
+
     const addToHistory = (entry) => setHistory(h => [...h, entry])
     const deleteHistory = (id) => setHistory(h => h.filter(e => e.id !== id))
     const clearAllHistory = () => setHistory([])
@@ -728,10 +787,16 @@ export default function App() {
             <aside className="sidebar">
                 <div className="sidebar-logo">
                     <div className="logo-mark">
-                        <div className="logo-icon">🍳</div>
-                        <div className="logo-name">Chef<em>OS</em></div>
+                        {branding.logo
+                            ? <img src={branding.logo} alt="" className="logo-img" />
+                            : <div className="logo-icon">🍳</div>}
+                        <div className="logo-name">
+                            {branding.name
+                                ? branding.name
+                                : <>Chef<em>OS</em></>}
+                        </div>
                     </div>
-                    <div className="logo-tagline">Kitchen Intelligence</div>
+                    <div className="logo-tagline">{branding.name ? 'Powered by ChefOS' : 'Kitchen Intelligence'}</div>
                 </div>
 
                 <nav className="nav-body">
@@ -817,7 +882,7 @@ export default function App() {
                         {page === 'vendors'      && <VendorsPage vendors={vendors} onReload={reload} />}
                         {page === 'setup'        && <SetupItemsPage setupItems={setupItems} vendors={vendors} onReload={reload} />}
                         {page === 'events'       && <EventsPage events={events} recipes={recipes} setupItems={setupItems} ingredients={ingredients} onReload={reload} />}
-                        {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} onReload={reload} />}
+                        {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} onReload={reload} branding={branding} onBrandingChange={applyBranding} />}
                     </Suspense>
                 )}
             </div>

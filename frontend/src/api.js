@@ -87,6 +87,10 @@ export const exportBackup  = ()        => api.post('/backup/export')
 export const restoreBackup = (name)    => api.post('/backup/restore', { name })
 export const restoreUpload = (zip_b64) => api.post('/backup/restore-upload', { zip_b64 })
 
+// ── Branding ──────────────────────────────────────────────
+export const getBranding = ()     => api.get('/settings/branding')
+export const setBranding = (data) => api.post('/settings/branding', data)
+
 // ── Google Drive cloud backup ─────────────────────────────
 export const gdriveStatus     = ()        => api.get('/gdrive/status')
 export const gdriveConnect    = ()        => api.post('/gdrive/connect', {}, { timeout: 200000 })

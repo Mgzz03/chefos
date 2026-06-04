@@ -128,6 +128,35 @@ def gdrive_list():
 def gdrive_restore(body: dict):
     return gdrive.restore_drive(body.get("file_id", ""))
 
+
+# ── Branding (restaurant name + logo) ──────────────────────
+def _branding_file():
+    db = os.environ.get("CHEFOS_DB_PATH")
+    base = os.path.dirname(db) if db else os.path.dirname(__file__)
+    return os.path.join(base, "branding.json")
+
+
+@app.get("/settings/branding")
+def get_branding():
+    import json as _j
+    try:
+        with open(_branding_file()) as f:
+            return _j.load(f)
+    except Exception:
+        return {"name": "", "logo": ""}
+
+
+@app.post("/settings/branding")
+def set_branding(body: dict):
+    import json as _j
+    data = {"name": str(body.get("name") or "")[:60], "logo": body.get("logo") or ""}
+    try:
+        with open(_branding_file(), "w") as f:
+            _j.dump(data, f)
+    except Exception:
+        pass
+    return data
+
 # ─────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────

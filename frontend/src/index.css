@@ -121,6 +121,12 @@ body {
   font-weight: 600;
   font-family: var(--serif);
 }
+.logo-img {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .logo-name {
   font-family: var(--serif);
   font-size: 22px;
@@ -875,13 +881,15 @@ body {
 
 .ai-empty-state {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;          /* scroll when the cards don't fit */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px;
+  justify-content: safe center;  /* centred when it fits, top-aligned + scrollable when it doesn't */
+  padding: 28px 40px 40px;
   text-align: center;
-  gap: 14px;
+  gap: 12px;
 }
 .ai-empty-icon {
   width: 70px; height: 70px;
@@ -920,6 +928,18 @@ body {
 .ai-quick-card-icon { font-size: 18px; margin-bottom: 6px }
 .ai-quick-card-title { font-weight: 600; font-size: 13.5px; color: var(--ink); margin-bottom: 2px }
 .ai-quick-card-desc { font-size: 12px; color: var(--ink-mute); line-height: 1.4 }
+
+.ai-print-btn { margin-left: 12px; background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; font-family: var(--sans) }
+.ai-print-btn:hover { text-decoration: underline }
+.ai-mic-btn {
+  width: 50px; height: 50px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--bg-card); color: var(--ink);
+  cursor: pointer; font-size: 18px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.ai-mic-btn:hover { border-color: var(--accent); color: var(--accent) }
+.ai-mic-btn.listening { background: var(--accent); color: #fff; border-color: var(--accent); animation: micpulse 1.1s infinite }
+@keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(108,11,37,0.4) } 50% { box-shadow: 0 0 0 9px rgba(108,11,37,0) } }
 
 /* ── Status dots ───────────────────────────────────────── */
 .status-dot {
