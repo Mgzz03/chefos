@@ -292,9 +292,16 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
     const [mBusy, setMBusy] = useState(false)
     const [bName, setBName] = useState((branding && branding.name) || '')
     const [bLogo, setBLogo] = useState((branding && branding.logo) || '')
+    const [bAssistant, setBAssistant] = useState((branding && branding.assistant_name) || 'Mgzz Assistant')
+    const [bMargin, setBMargin] = useState((branding && branding.margin != null) ? branding.margin : 70)
     const [brandMsg, setBrandMsg] = useState('')
     const logoRef = useRef(null)
-    useEffect(() => { setBName((branding && branding.name) || ''); setBLogo((branding && branding.logo) || '') }, [branding])
+    useEffect(() => {
+        setBName((branding && branding.name) || '')
+        setBLogo((branding && branding.logo) || '')
+        setBAssistant((branding && branding.assistant_name) || 'Mgzz Assistant')
+        setBMargin((branding && branding.margin != null) ? branding.margin : 70)
+    }, [branding])
     const onLogoPick = (e) => {
         const f = e.target.files[0]; if (!f) return
         if (f.size > 400000) { setBrandMsg('Logo too large — use an image under 400 KB.'); e.target.value = ''; return }
@@ -302,8 +309,10 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
     }
     const saveBrand = async () => {
         setBrandMsg('Saving…')
-        try { const { data } = await api.setBranding({ name: bName.trim(), logo: bLogo }); onBrandingChange(data); setBrandMsg('✓ Saved') }
-        catch { setBrandMsg('Save failed.') }
+        try {
+            const { data } = await api.setBranding({ name: bName.trim(), logo: bLogo, assistant_name: bAssistant.trim(), margin: Number(bMargin) })
+            onBrandingChange(data); setBrandMsg('✓ Saved')
+        } catch { setBrandMsg('Save failed.') }
     }
     const [bks, setBks] = useState([])
     const [bMsg, setBMsg] = useState('')
@@ -426,6 +435,21 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
                         {bLogo && <button onClick={() => setBLogo('')} style={{ padding: '10px 14px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, cursor: 'pointer' }}>Remove</button>}
                         <button onClick={saveBrand} style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Save</button>
                         <input ref={logoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onLogoPick} />
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 18 }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-mute, #7a6f5a)', textTransform: 'uppercase', letterSpacing: .6, marginBottom: 6 }}>Assistant name</label>
+                        <input value={bAssistant} onChange={(e) => setBAssistant(e.target.value)} placeholder="Mgzz Assistant"
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: 'var(--cream, #faf7e7)', color: 'var(--ink, #2E1A0E)', fontSize: 14 }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-mute, #7a6f5a)', textTransform: 'uppercase', letterSpacing: .6, marginBottom: 6 }}>Target profit margin (%)</label>
+                        <input type="number" min="0" max="95" value={bMargin} onChange={(e) => setBMargin(e.target.value)}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: 'var(--cream, #faf7e7)', color: 'var(--ink, #2E1A0E)', fontSize: 14 }} />
+                        <div style={{ fontSize: 11, color: 'var(--ink-mute, #7a6f5a)', marginTop: 4 }}>
+                            Used for sell-price suggestions (food cost ≈ {Math.max(0, 100 - Number(bMargin || 0))}%).
+                        </div>
                     </div>
                 </div>
                 {brandMsg && <div style={{ fontSize: 13, marginTop: 12 }}>{brandMsg}</div>}
@@ -712,20 +736,21 @@ export default function App() {
         return () => { clearTimeout(debounce); supabase.removeChannel(channel) }
     }, [session, reload])
 
+    const applyBranding = (b) => {
+        const data = b || {}
+        setBranding(data)
+        try {
+            if (data.name) localStorage.setItem('chefos_brand', data.name); else localStorage.removeItem('chefos_brand')
+            localStorage.setItem('chefos_margin', String(data.margin != null ? data.margin : 70))
+            localStorage.setItem('chefos_assistant', data.assistant_name || 'Mgzz Assistant')
+        } catch (e) {}
+    }
+
     // Load restaurant branding once past the gate
     useEffect(() => {
         if (!session || (LOCAL && !licensed)) return
-        api.getBranding().then(({ data }) => {
-            setBranding(data || { name: '', logo: '' })
-            if (data && data.name) localStorage.setItem('chefos_brand', data.name)
-        }).catch(() => {})
+        api.getBranding().then(({ data }) => applyBranding(data || {})).catch(() => {})
     }, [session, licensed])
-
-    const applyBranding = (b) => {
-        setBranding(b)
-        if (b && b.name) localStorage.setItem('chefos_brand', b.name)
-        else localStorage.removeItem('chefos_brand')
-    }
 
     const addToHistory = (entry) => setHistory(h => [...h, entry])
     const deleteHistory = (id) => setHistory(h => h.filter(e => e.id !== id))
@@ -796,7 +821,7 @@ export default function App() {
                                 : <>Chef<em>OS</em></>}
                         </div>
                     </div>
-                    <div className="logo-tagline">{branding.name ? 'Powered by ChefOS' : 'Kitchen Intelligence'}</div>
+                    <div className="logo-tagline">{branding.name ? "Powered by Mgzz's intelligence" : 'Kitchen Intelligence'}</div>
                 </div>
 
                 <nav className="nav-body">
@@ -808,7 +833,7 @@ export default function App() {
                                     className={`nav-btn${page === item.id ? ' active' : ''}`}
                                     onClick={() => setPage(item.id)}>
                                     <span className="nav-icon">{item.icon}</span>
-                                    <span>{item.label}</span>
+                                    <span>{item.id === 'ai' ? (branding.assistant_name || 'Mgzz Assistant') : item.label}</span>
                                     {item.id === 'waste' && wasteLog.length > 0 && <span className="nav-badge">{wasteLog.length}</span>}
                                     {item.id === 'inventory' && dangerAlerts.length > 0 && <span className="nav-badge">{dangerAlerts.length}</span>}
                                 </button>
@@ -824,7 +849,7 @@ export default function App() {
             <div className="main-content">
                 <header className="topbar">
                     <div>
-                        <div className="topbar-title">{pageTitles[page] || page}</div>
+                        <div className="topbar-title">{page === 'ai' ? (branding.assistant_name || 'Mgzz Assistant') : (pageTitles[page] || page)}</div>
                         <div className="topbar-sub">
                             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                         </div>

@@ -136,20 +136,38 @@ def _branding_file():
     return os.path.join(base, "branding.json")
 
 
-@app.get("/settings/branding")
-def get_branding():
+_BRANDING_DEFAULTS = {"name": "", "logo": "", "margin": 70, "assistant_name": "Mgzz Assistant"}
+
+
+def _read_branding():
     import json as _j
+    data = dict(_BRANDING_DEFAULTS)
     try:
         with open(_branding_file()) as f:
-            return _j.load(f)
+            data.update(_j.load(f) or {})
     except Exception:
-        return {"name": "", "logo": ""}
+        pass
+    return data
+
+
+@app.get("/settings/branding")
+def get_branding():
+    return _read_branding()
 
 
 @app.post("/settings/branding")
 def set_branding(body: dict):
     import json as _j
-    data = {"name": str(body.get("name") or "")[:60], "logo": body.get("logo") or ""}
+    data = _read_branding()                       # merge — don't wipe other fields
+    if "name" in body:           data["name"] = str(body.get("name") or "")[:60]
+    if "logo" in body:           data["logo"] = body.get("logo") or ""
+    if "assistant_name" in body: data["assistant_name"] = (str(body.get("assistant_name") or "").strip()[:40]) or "Mgzz Assistant"
+    if "margin" in body:
+        try:
+            m = float(body.get("margin"))
+            data["margin"] = max(0, min(95, round(m)))   # gross profit margin %, capped 0–95
+        except Exception:
+            pass
     try:
         with open(_branding_file(), "w") as f:
             _j.dump(data, f)
