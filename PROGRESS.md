@@ -65,11 +65,42 @@ interfering again — confirm the exclusions are still active (or pause real-tim
 
 ---
 
-## ⏳ STEP 2 — License key activation (Cloudflare Worker + KV)   — NOT STARTED
-Activation screen, hardware fingerprint, Cloudflare Worker + KV license server,
-signed JWT, 30-day re-check / 60-day offline grace, admin page.
-> Note: an old offline `backend/license.py` exists; Step 2 replaces it with the
-> online Cloudflare system you specified.
+## ✅ STEP 2 — License key activation (Cloudflare Worker + KV)   — BUILT & TESTED
+All four parts built and **verified end-to-end against a local `wrangler dev`**:
+- **License server** `license-server/src/worker.js` (Cloudflare Worker + KV):
+  `/activate`, `/validate`, `/deactivate`, admin `/admin/*`. Signs HS256 tokens.
+  ✔ Tested: generate key, activate, idempotent re-activate, device-limit enforced,
+  invalid key → 404, admin auth, revoke → app locks on next check.
+- **Admin page** `license-server/admin.html` — single file: generate keys, see
+  active devices, revoke/enable, set expiry, reset devices, delete.
+- **Backend client** `backend/license_client.py` (stdlib only): hardware
+  fingerprint (MAC + Windows MachineGuid + host), encrypted+HMAC local token bound
+  to the fingerprint, 30-day online re-check, 60-day offline grace.
+  Endpoints in main.py: `/license/status`, `/license/activate`, `/license/deactivate`.
+  ✔ Tested: full backend→Worker activate/status/deactivate chain; a token copied to
+  a different fingerprint fails to open (anti-piracy).
+- **Activation screen** in `App.jsx` — gates the local app until activated
+  (auto-formats `CHEF-XXXX-XXXX-XXXX`); **Settings page** added with a
+  "Deactivate this device" button + license info.
+
+### 🚀 What YOU need to do to turn Step 2 on
+1. Deploy the Worker — follow **`license-server/README.md`** (free Cloudflare
+   account → `wrangler kv namespace create` → set `JWT_SECRET` + `ADMIN_TOKEN`
+   secrets → `wrangler deploy`). You get a URL like
+   `https://chefos-license.<you>.workers.dev`.
+2. Open `license-server/admin.html`, connect with that URL + your `ADMIN_TOKEN`,
+   and **Generate** a key for the chef.
+3. Rebuild the app with the URL baked in:
+   ```
+   # PowerShell, before the build:
+   $env:CHEFOS_LICENSE_URL = "https://chefos-license.<you>.workers.dev"
+   cd C:\chefos\backend;  .\venv\Scripts\python.exe build_sidecar.py
+   cd C:\chefos\frontend; npm run tauri build
+   ```
+   (For Tier-1 dev testing, just set `$env:CHEFOS_LICENSE_URL` before
+   `run_server.py` — no rebuild needed.)
+4. Launch ChefOS → activation screen → paste the key → it activates and never
+   asks again on that device.
 
 ## ⏳ STEP 3 — Same-WiFi mobile access   — NOT STARTED
 Bind backend to LAN, auto-detect local IP, Settings toggle + QR code.

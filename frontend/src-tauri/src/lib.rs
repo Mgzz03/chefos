@@ -30,7 +30,11 @@ pub fn run() {
                 .env("CHEFOS_LOCAL", "1")
                 .env("CHEFOS_DB_PATH", db_path.to_string_lossy().to_string())
                 .env("CHEFOS_HOST", "127.0.0.1")
-                .env("CHEFOS_PORT", "8000");
+                .env("CHEFOS_PORT", "8000")
+                // License server URL, baked in at build time:
+                //   set CHEFOS_LICENSE_URL=https://chefos-license.<you>.workers.dev
+                // before `npm run tauri build`.
+                .env("CHEFOS_LICENSE_URL", option_env!("CHEFOS_LICENSE_URL").unwrap_or(""));
 
             let (mut rx, child) = sidecar.spawn().expect("failed to start ChefOS backend");
 

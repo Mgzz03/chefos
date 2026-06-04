@@ -1,0 +1,12 @@
+name = "chefos-license"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# The KV namespace id is filled in during setup (see README.md step 3).
+kv_namespaces = [
+  { binding = "LICENSES", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+]
+
+# Secrets are NOT stored here. Set them with:
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put ADMIN_TOKEN

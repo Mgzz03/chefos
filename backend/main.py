@@ -9,6 +9,7 @@ import uuid
 from database import engine, get_db, Base
 from auth import get_current_user
 from bootstrap import ensure_local_schema
+import license_client
 from models import (Category, Ingredient, InventoryBatch, Recipe, RecipeIngredient,
                     Vendor, SetupItem, Event, EventRecipe, EventSetupItem, Transaction,
                     CookedStock, Item, ItemSubRecipe, ItemIngredient, WasteLog)
@@ -51,6 +52,22 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+# ── License activation (no auth — these gate the app itself) ────────
+@app.get("/license/status")
+def license_status():
+    return license_client.status()
+
+
+@app.post("/license/activate")
+def license_activate(body: dict):
+    return license_client.activate(body.get("key", ""))
+
+
+@app.post("/license/deactivate")
+def license_deactivate():
+    return license_client.deactivate()
 
 # ─────────────────────────────────────────────────────────
 # HELPERS

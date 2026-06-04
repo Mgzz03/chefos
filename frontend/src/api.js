@@ -60,6 +60,11 @@ export async function flushOfflineQueue() {
     return { synced, skipped }
 }
 
+// ── License (local desktop activation) ────────────────────
+export const getLicenseStatus  = ()    => api.get('/license/status')
+export const activateLicense   = (key) => api.post('/license/activate', { key })
+export const deactivateLicense = ()    => api.post('/license/deactivate')
+
 // ── Categories ────────────────────────────────────────────
 export const getCategories      = ()           => api.get('/categories')
 export const createCategory     = (data)       => api.post('/categories', data)

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ChefOS · License Admin</title>
+<style>
+  :root{ --cream:#FAF7E7; --espresso:#2E1A0E; --ruby:#6C0B25; --gold:#c8922a;
+         --line:#e3dcc4; --mute:#7a6f5a; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--cream); color:var(--espresso);
+        font-family:Inter,system-ui,Segoe UI,Arial,sans-serif; }
+  h1,h2,h3{ font-family:"Cormorant Garamond",Georgia,serif; font-weight:600; margin:0; }
+  header{ background:var(--espresso); color:var(--cream); padding:18px 28px;
+          display:flex; align-items:center; gap:14px; }
+  header .hat{ font-size:26px; }
+  header h1{ font-size:26px; letter-spacing:.5px; }
+  header small{ color:var(--gold); margin-left:auto; }
+  .wrap{ max-width:1100px; margin:0 auto; padding:24px 28px 60px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+         padding:20px 22px; margin-bottom:22px; box-shadow:0 1px 0 rgba(0,0,0,.02); }
+  label{ display:block; font-size:12px; color:var(--mute); margin:0 0 4px; text-transform:uppercase; letter-spacing:.6px; }
+  input,select{ width:100%; padding:10px 12px; border:1px solid var(--line);
+         border-radius:9px; font-size:14px; background:var(--cream); color:var(--espresso); }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .row > div{ flex:1; min-width:150px; }
+  button{ cursor:pointer; border:none; border-radius:9px; padding:10px 16px;
+          font-size:13px; font-weight:600; background:var(--ruby); color:#fff; }
+  button.ghost{ background:transparent; color:var(--ruby); border:1px solid var(--ruby); }
+  button.mini{ padding:6px 10px; font-size:12px; }
+  button.gray{ background:#efe9d6; color:var(--espresso); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th,td{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th{ font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--mute); }
+  .key{ font-family:ui-monospace,Consolas,monospace; font-weight:700; letter-spacing:.5px; }
+  .pill{ display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+  .on{ background:#e7f4e8; color:#1f7a32; } .off{ background:#fbe6e9; color:var(--ruby); }
+  .dev{ font-family:ui-monospace,Consolas,monospace; font-size:11px; color:var(--mute); }
+  .muted{ color:var(--mute); font-size:12px; }
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+          background:var(--espresso); color:var(--cream); padding:12px 20px;
+          border-radius:10px; font-size:13px; opacity:0; transition:.25s; pointer-events:none; }
+  .toast.show{ opacity:1; }
+  .actions{ display:flex; gap:6px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <span class="hat">👨‍🍳</span>
+  <h1>ChefOS License Admin</h1>
+  <small id="conn">not connected</small>
+</header>
+
+<div class="wrap">
+
+  <!-- Connection -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Server connection</h3>
+    <div class="row">
+      <div style="flex:2">
+        <label>Worker URL</label>
+        <input id="serverUrl" placeholder="https://chefos-license.YOURNAME.workers.dev" />
+      </div>
+      <div style="flex:2">
+        <label>Admin token</label>
+        <input id="adminToken" type="password" placeholder="your ADMIN_TOKEN secret" />
+      </div>
+      <div style="flex:0 0 auto; display:flex; align-items:flex-end">
+        <button onclick="saveConn()">Connect &amp; refresh</button>
+      </div>
+    </div>
+    <p class="muted" style="margin:10px 0 0">Saved locally in this browser only.</p>
+  </div>
+
+  <!-- Generate -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Generate a new license key</h3>
+    <div class="row">
+      <div><label>Chef / customer name</label><input id="gName" placeholder="Chef Ahmed" /></div>
+      <div><label>Email</label><input id="gEmail" placeholder="chef@email.com" /></div>
+      <div style="flex:0 0 130px"><label>Max devices</label><input id="gMax" type="number" min="1" value="1" /></div>
+      <div style="flex:0 0 170px"><label>Expires (optional)</label><input id="gExp" type="date" /></div>
+      <div style="flex:0 0 auto; display:flex; align-items:flex-end"><button onclick="genKey()">Generate</button></div>
+    </div>
+    <div id="genOut" style="margin-top:14px"></div>
+  </div>
+
+  <!-- List -->
+  <div class="card">
+    <div style="display:flex; align-items:center; margin-bottom:12px">
+      <h3>Licenses</h3>
+      <button class="ghost mini" style="margin-left:auto" onclick="refresh()">Refresh</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Key</th><th>Chef</th><th>Status</th><th>Devices</th><th>Expires</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="muted">Connect to load licenses…</td></tr></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let URLBASE = localStorage.getItem('chefos_admin_url') || '';
+let TOKEN   = localStorage.getItem('chefos_admin_token') || '';
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+async function api(path, method='GET', body){
+  const res = await fetch(URLBASE.replace(/\/+$/,'') + path, {
+    method,
+    headers: { 'content-type':'application/json', 'x-admin-token': TOKEN },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(()=>({ok:false,error:'bad response'}));
+  if(!res.ok || data.ok===false) throw new Error(data.error || ('HTTP '+res.status));
+  return data;
+}
+
+function saveConn(){
+  URLBASE = $('serverUrl').value.trim();
+  TOKEN   = $('adminToken').value.trim();
+  localStorage.setItem('chefos_admin_url', URLBASE);
+  localStorage.setItem('chefos_admin_token', TOKEN);
+  refresh();
+}
+
+function fmtDate(unix){ if(!unix) return '—'; const d=new Date(unix*1000); return d.toISOString().slice(0,10); }
+function copy(txt){ navigator.clipboard.writeText(txt); toast('Copied: '+txt); }
+
+async function genKey(){
+  try{
+    const exp = $('gExp').value ? Math.floor(new Date($('gExp').value+'T23:59:59').getTime()/1000) : null;
+    const r = await api('/admin/keys','POST',{
+      chef_name:$('gName').value.trim(), email:$('gEmail').value.trim(),
+      max_devices:parseInt($('gMax').value||'1',10), expires_at:exp,
+    });
+    $('genOut').innerHTML = `<div style="padding:14px;background:var(--cream);border:1px dashed var(--gold);border-radius:10px">
+      New key for <b>${r.chef_name||'—'}</b>: <span class="key" style="font-size:18px">${r.key}</span>
+      <button class="ghost mini" style="margin-left:10px" onclick="copy('${r.key}')">Copy</button></div>`;
+    $('gName').value=$('gEmail').value=$('gExp').value=''; $('gMax').value='1';
+    toast('Key generated'); refresh();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function refresh(){
+  if(!URLBASE || !TOKEN){ $('conn').textContent='not connected'; return; }
+  try{
+    const r = await api('/admin/keys','GET');
+    $('conn').textContent = 'connected · '+r.keys.length+' keys';
+    $('rows').innerHTML = r.keys.map(k => {
+      const devs = (k.activated_devices||[]).map(d =>
+        `<div class="dev" title="${d.fingerprint}">• ${d.device_name||'device'} (${(d.fingerprint||'').slice(0,8)}…)</div>`).join('') || '<span class="muted">none</span>';
+      const used = (k.activated_devices||[]).length;
+      return `<tr>
+        <td><span class="key">${k.key}</span><br><button class="ghost mini" onclick="copy('${k.key}')">copy</button></td>
+        <td>${k.chef_name||'—'}<div class="muted">${k.email||''}</div></td>
+        <td><span class="pill ${k.is_active?'on':'off'}">${k.is_active?'active':'revoked'}</span></td>
+        <td>${used}/${k.max_devices||1}${devs?'<br>'+devs:''}</td>
+        <td>${fmtDate(k.expires_at)}</td>
+        <td><div class="actions">
+          ${k.is_active
+            ? `<button class="mini" onclick="act('/admin/revoke','${k.key}')">Revoke</button>`
+            : `<button class="mini gray" onclick="act('/admin/enable','${k.key}')">Enable</button>`}
+          <button class="mini gray" onclick="resetDev('${k.key}')">Reset devices</button>
+          <button class="mini gray" onclick="extend('${k.key}')">Set expiry</button>
+          <button class="mini gray" onclick="del('${k.key}')">Delete</button>
+        </div></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="muted">No licenses yet.</td></tr>';
+  }catch(e){ $('conn').textContent='error'; toast('Error: '+e.message); }
+}
+
+async function act(path,key){ try{ await api(path,'POST',{key}); toast('Done'); refresh(); }catch(e){ toast('Error: '+e.message);} }
+async function resetDev(key){ if(!confirm('Remove ALL registered devices for '+key+'?\nThe chef will need to re-activate.'))return;
+  try{ await api('/admin/reset-devices','POST',{key}); toast('Devices reset'); refresh(); }catch(e){ toast('Error: '+e.message);} }
+async function del(key){ if(!confirm('Permanently DELETE '+key+'? This cannot be undone.'))return;
+  try{ await api('/admin/keys?key='+encodeURIComponent(key),'DELETE'); toast('Deleted'); refresh(); }catch(e){ toast('Error: '+e.message);} }
+async function extend(key){ const v=prompt('New expiry date (YYYY-MM-DD), or leave blank for "never":',''); if(v===null)return;
+  const exp = v.trim() ? Math.floor(new Date(v.trim()+'T23:59:59').getTime()/1000) : null;
+  try{ await api('/admin/extend','POST',{key,expires_at:exp}); toast('Expiry updated'); refresh(); }catch(e){ toast('Error: '+e.message);} }
+
+// init
+$('serverUrl').value = URLBASE; $('adminToken').value = TOKEN;
+if(URLBASE && TOKEN) refresh();
+</script>
+</body>
+</html>

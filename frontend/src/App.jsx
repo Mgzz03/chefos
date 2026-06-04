@@ -96,6 +96,11 @@ const NAV = [
             { id: 'vendors', icon: '🏢', label: 'Vendors' },
         ]
     },
+    {
+        label: 'System', items: [
+            { id: 'settings', icon: '⚙', label: 'Settings' },
+        ]
+    },
 ]
 
 // ─────────────────────────────────────────────────────────
@@ -191,6 +196,126 @@ function LoginScreen() {
 }
 
 // ─────────────────────────────────────────────────────────
+// ACTIVATION SCREEN (local desktop license gate)
+// ─────────────────────────────────────────────────────────
+function ActivationScreen({ onActivated, info }) {
+    const [key, setKey]     = useState('')
+    const [busy, setBusy]   = useState(false)
+    const [error, setError] = useState('')
+
+    const formatKey = (v) => {
+        let s = v.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        if (s.startsWith('CHEF')) s = s.slice(4)
+        s = s.slice(0, 12)
+        const groups = s.match(/.{1,4}/g) || []
+        return s.length ? 'CHEF-' + groups.join('-') : ''
+    }
+
+    const submit = async (e) => {
+        e.preventDefault()
+        setError(''); setBusy(true)
+        try {
+            const { data } = await api.activateLicense(key)
+            if (data.ok) onActivated(data)
+            else setError(data.error || 'Activation failed')
+        } catch (err) {
+            setError('Could not reach the app service. Please try again.')
+        }
+        setBusy(false)
+    }
+
+    const reason = info && info.reason
+    const notice = reason === 'expired'      ? 'Your license has expired. Enter a renewed key to continue.'
+                 : reason === 'revoked'      ? 'This license is no longer active. Please contact support.'
+                 : reason === 'invalid_or_moved' ? 'This install is on a new device. Please re-enter your license key.'
+                 : reason === 'needs_reverification' ? 'Please reconnect to the internet to re-verify your license.'
+                 : null
+
+    const C = { cream: '#FAF7E7', espresso: '#2E1A0E', ruby: '#6C0B25', gold: '#c8922a', line: '#e3dcc4', mute: '#7a6f5a' }
+
+    return (
+        <div style={{ minHeight: '100vh', background: C.cream, color: C.espresso,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'Inter, system-ui, sans-serif', padding: 20 }}>
+            <form onSubmit={submit} style={{ width: 420, maxWidth: '100%', background: '#fff',
+                      border: `1px solid ${C.line}`, borderRadius: 18, padding: '38px 36px',
+                      boxShadow: '0 24px 60px rgba(46,26,14,.12)', textAlign: 'center' }}>
+                <div style={{ fontSize: 46, lineHeight: 1 }}>👨‍🍳</div>
+                <h1 style={{ fontFamily: '"Cormorant Garamond", Georgia, serif', fontSize: 38,
+                             margin: '10px 0 2px', color: C.espresso, letterSpacing: .5 }}>ChefOS</h1>
+                <p style={{ margin: '0 0 22px', color: C.mute, fontSize: 14 }}>Activate this device to begin</p>
+
+                {notice && (
+                    <div style={{ background: '#fbf1e0', border: `1px solid ${C.gold}`, color: '#7a5a16',
+                                  borderRadius: 10, padding: '9px 12px', fontSize: 13, marginBottom: 16 }}>{notice}</div>
+                )}
+
+                <label style={{ display: 'block', textAlign: 'left', fontSize: 12, color: C.mute,
+                                textTransform: 'uppercase', letterSpacing: .6, marginBottom: 6 }}>License key</label>
+                <input
+                    autoFocus
+                    value={key}
+                    onChange={(e) => setKey(formatKey(e.target.value))}
+                    placeholder="CHEF-XXXX-XXXX-XXXX"
+                    spellCheck={false}
+                    style={{ width: '100%', padding: '13px 14px', borderRadius: 10, fontSize: 18,
+                             letterSpacing: 2, textAlign: 'center', fontFamily: 'ui-monospace, Consolas, monospace',
+                             border: `1.5px solid ${error ? C.ruby : C.line}`, background: C.cream,
+                             color: C.espresso, outline: 'none' }}
+                />
+
+                {error && <div style={{ color: C.ruby, fontSize: 13, marginTop: 12 }}>{error}</div>}
+
+                <button type="submit" disabled={busy || key.length < 19}
+                    style={{ width: '100%', marginTop: 20, padding: '13px', borderRadius: 10, border: 'none',
+                             background: busy || key.length < 19 ? '#c9a9b1' : C.ruby, color: '#fff',
+                             fontSize: 15, fontWeight: 700, cursor: busy || key.length < 19 ? 'default' : 'pointer' }}>
+                    {busy ? 'Activating…' : 'Activate'}
+                </button>
+
+                <p style={{ marginTop: 22, marginBottom: 0, fontSize: 12, color: C.mute }}>
+                    Contact support to get your license key.
+                </p>
+            </form>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────
+// SETTINGS PAGE  (License now; Mobile Access + Backups added in later steps)
+// ─────────────────────────────────────────────────────────
+function SettingsPage({ licenseInfo, onDeactivate }) {
+    const info = licenseInfo || {}
+    const fmt = (u) => u ? new Date(u * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+    const Row = ({ label, value }) => (
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
+            <span style={{ color: 'var(--ink-mute, #7a6f5a)' }}>{label}</span>
+            <span style={{ fontWeight: 600 }}>{value}</span>
+        </div>
+    )
+    return (
+        <div style={{ maxWidth: 640 }}>
+            <div className="card" style={{ padding: 24 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>License &amp; Activation</h3>
+                <Row label="Status" value={info.activated ? 'Activated ✓' : 'Not activated'} />
+                {info.chef_name ? <Row label="Licensed to" value={info.chef_name} /> : null}
+                <Row label="This device ID" value={(info.fingerprint || '').slice(0, 12) + '…'} />
+                <Row label="Last verified" value={fmt(info.last_validated)} />
+                <Row label="Expires" value={info.expires_at ? fmt(info.expires_at) : 'Never'} />
+                <button onClick={onDeactivate}
+                    style={{ marginTop: 20, padding: '10px 16px', borderRadius: 9, border: 'none',
+                             background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+                    Deactivate this device
+                </button>
+                <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+                    Deactivating frees this license so it can be used on another computer.
+                </p>
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────
 // APP SHELL
 // ─────────────────────────────────────────────────────────
 export default function App() {
@@ -212,6 +337,10 @@ export default function App() {
     const [loading, setLoading] = useState(true)
     const [simRecipe, setSimRecipe] = useState(null)
     const [history, setHistory] = useState([])
+    // License gate (local desktop only; cloud build is not gated here)
+    const [licenseReady, setLicenseReady] = useState(!LOCAL)
+    const [licensed, setLicensed]         = useState(!LOCAL)
+    const [licenseInfo, setLicenseInfo]   = useState(null)
 
     const reload = useCallback(async () => {
         try {
@@ -254,6 +383,19 @@ export default function App() {
                 for (let i = 0; i < 40 && !cancelled; i++) {
                     try { await fetch(`${base}/health`); break }
                     catch { await new Promise(r => setTimeout(r, 500)) }
+                }
+                // ── License gate: only load the app if this device is activated ──
+                try {
+                    const { data } = await api.getLicenseStatus()
+                    if (cancelled) return
+                    setLicenseInfo(data)
+                    setLicensed(!!data.activated)
+                    setLicenseReady(true)
+                    if (!data.activated) { setLoading(false); return }
+                } catch {
+                    if (cancelled) return
+                    setLicensed(false); setLicenseReady(true); setLoading(false)
+                    return
                 }
             }
             if (!cancelled) reload()
@@ -325,6 +467,17 @@ export default function App() {
         setSession(null)
     }
 
+    const handleActivated = async (info) => {
+        setLicenseInfo(info); setLicensed(true)
+        await reload()
+    }
+
+    const handleDeactivate = async () => {
+        if (!window.confirm('Deactivate ChefOS on this device?\nYou will need your license key to use it here again.')) return
+        try { await api.deactivateLicense() } catch (e) { console.error(e) }
+        setLicensed(false)
+    }
+
     const dangerAlerts = alerts.filter(a => ['out', 'expired', 'critical'].includes(a.type))
     const wasteCost = wasteLog.reduce((s, w) => s + (w.cost_lost || 0), 0)
 
@@ -334,11 +487,14 @@ export default function App() {
         history: 'Cook History', waste: 'Waste Log',
         inventory: 'Inventory', ingredients: 'Ingredients', categories: 'Categories',
         events: 'Events', setup: 'Setup Items', vendors: 'Vendors',
+        settings: 'Settings',
     }
 
     // ── Show login if not authenticated ───────────────────
     if (!authReady) return null   // avoid flash while session loads
     if (!session)   return <LoginScreen />
+    if (LOCAL && !licenseReady) return null   // checking license
+    if (LOCAL && !licensed)     return <ActivationScreen onActivated={handleActivated} info={licenseInfo} />
 
     return (
         <div className="app-shell">
@@ -435,6 +591,7 @@ export default function App() {
                         {page === 'vendors'      && <VendorsPage vendors={vendors} onReload={reload} />}
                         {page === 'setup'        && <SetupItemsPage setupItems={setupItems} vendors={vendors} onReload={reload} />}
                         {page === 'events'       && <EventsPage events={events} recipes={recipes} setupItems={setupItems} ingredients={ingredients} onReload={reload} />}
+                        {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} />}
                     </Suspense>
                 )}
             </div>
