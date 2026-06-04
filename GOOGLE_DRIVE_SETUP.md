@@ -16,14 +16,19 @@ You'll create a Google "OAuth client" and paste two values into the app build.
 1. Left menu → **APIs & Services** → **Library**.
 2. Search **Google Drive API** → click it → **Enable**.
 
-## 3. Configure the consent screen
+## 3. Configure the consent screen — and PUBLISH it
 1. **APIs & Services** → **OAuth consent screen**.
 2. User type: **External** → **Create**.
-3. App name: `ChefOS`. User support email: your email. Developer email: your email. **Save and continue**.
+3. App name: `ChefOS`. User support email: your email. Developer contact: your email. **Save and continue**.
 4. **Scopes** → Save and continue (no changes needed).
-5. **Test users** → **Add users** → add the Google account(s) that will use the
-   backup (the chef's Google account, and yours). **Save and continue.**
-   > Leave the app in **Testing** mode — no Google verification needed for personal use.
+5. **Test users** → Save and continue (you can skip adding any).
+6. **Publish the app:** go back to the **OAuth consent screen** (or the **Audience**
+   tab in newer UI). Under *Publishing status: Testing*, click **PUBLISH APP** → **Confirm**.
+   > This moves it to **In production** so the chef's Google Drive connection
+   > **never expires**. The chef will see a one-time *"Google hasn't verified this
+   > app"* notice and click past it — that's normal and safe for the `drive.file`
+   > scope (the app can only touch its own backup files). You can submit for
+   > Google verification later to remove that notice; it's not required.
 
 ## 4. Create the OAuth client (Desktop app)
 1. **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID**.
@@ -58,9 +63,11 @@ In ChefOS → **Settings → Cloud Backup** → **Connect Google Drive**:
 ---
 
 ### Notes
-- Only the **test users** you added in step 3 can connect — that's the security boundary.
+- Because the app is **Published (production)**, any chef can connect with their own
+  Google account, and the connection **persists** (no weekly reconnect). They just
+  click past the one-time "unverified app" notice.
 - ChefOS uses the `drive.file` scope: it can **only** touch the backups it creates,
-  never the rest of your Drive.
+  never the rest of the chef's Drive.
 - The Client ID/secret for a Desktop app are not true secrets (they're embedded in
   every desktop app); your data is protected by the per-user Google sign-in, not
   by hiding these values.
