@@ -4,7 +4,7 @@ compatibility_date = "2024-11-01"
 
 # The KV namespace id is filled in during setup (see README.md step 3).
 kv_namespaces = [
-  { binding = "LICENSES", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+  { binding = "LICENSES", id = "5e0830bec0744df9bb202c8d7cbec4c3" }
 ]
 
 # Secrets are NOT stored here. Set them with:

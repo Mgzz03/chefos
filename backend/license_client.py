@@ -103,7 +103,12 @@ def _post(path: str, payload: dict, timeout: int = 10):
     req = urllib.request.Request(
         LICENSE_URL + path,
         data=json.dumps(payload).encode(),
-        headers={"content-type": "application/json"},
+        headers={
+            "content-type": "application/json",
+            # Cloudflare blocks the default Python-urllib UA (error 1010),
+            # so present a normal client UA.
+            "User-Agent": "ChefOS/1.0",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
