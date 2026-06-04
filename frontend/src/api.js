@@ -81,6 +81,12 @@ export const deactivateLicense = ()    => api.post('/license/deactivate')
 export const getMobileStatus = ()        => api.get('/mobile/status')
 export const toggleMobile    = (enabled) => api.post('/mobile/toggle', { enabled })
 
+// ── Backups ────────────────────────────────────────────────
+export const listBackups   = ()        => api.get('/backup/list')
+export const exportBackup  = ()        => api.post('/backup/export')
+export const restoreBackup = (name)    => api.post('/backup/restore', { name })
+export const restoreUpload = (zip_b64) => api.post('/backup/restore-upload', { zip_b64 })
+
 // ── Categories ────────────────────────────────────────────
 export const getCategories      = ()           => api.get('/categories')
 export const createCategory     = (data)       => api.post('/categories', data)

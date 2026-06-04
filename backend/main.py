@@ -10,6 +10,7 @@ from database import engine, get_db, Base
 from auth import get_current_user
 from bootstrap import ensure_local_schema
 import license_client
+import backups
 from models import (Category, Ingredient, InventoryBatch, Recipe, RecipeIngredient,
                     Vendor, SetupItem, Event, EventRecipe, EventSetupItem, Transaction,
                     CookedStock, Item, ItemSubRecipe, ItemIngredient, WasteLog)
@@ -27,6 +28,7 @@ from schemas import (CategoryCreate, CategoryOut,
 
 ensure_local_schema(engine)        # patch older local DBs before create_all
 Base.metadata.create_all(bind=engine)
+backups.auto_backup()              # daily local snapshot on startup (keep last 30)
 
 app = FastAPI(title="ChefOS API v2")
 
@@ -68,6 +70,28 @@ def license_activate(body: dict):
 @app.post("/license/deactivate")
 def license_deactivate():
     return license_client.deactivate()
+
+
+# ── Backups (local) ────────────────────────────────────────
+@app.get("/backup/list")
+def backup_list():
+    return {"backups": backups.list_backups()}
+
+
+@app.post("/backup/export")
+def backup_export():
+    return backups.export_to_desktop()
+
+
+@app.post("/backup/restore")
+def backup_restore(body: dict):
+    res = backups.restore_from_backup(body.get("name", ""))
+    return res
+
+
+@app.post("/backup/restore-upload")
+def backup_restore_upload(body: dict):
+    return backups.restore_from_zip_b64(body.get("zip_b64", ""))
 
 # ─────────────────────────────────────────────────────────
 # HELPERS

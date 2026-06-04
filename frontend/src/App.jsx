@@ -285,17 +285,55 @@ function ActivationScreen({ onActivated, info }) {
 // ─────────────────────────────────────────────────────────
 // SETTINGS PAGE  (License now; Mobile Access + Backups added in later steps)
 // ─────────────────────────────────────────────────────────
-function SettingsPage({ licenseInfo, onDeactivate }) {
+function SettingsPage({ licenseInfo, onDeactivate, onReload }) {
     const [info, setInfo] = useState(licenseInfo || {})
     const [mobile, setMobile] = useState(null)
     const [qr, setQr] = useState('')
     const [mBusy, setMBusy] = useState(false)
+    const [bks, setBks] = useState([])
+    const [bMsg, setBMsg] = useState('')
+    const fileRef = useRef(null)
+    const loadBackups = () => api.listBackups().then(({ data }) => setBks(data.backups || [])).catch(() => {})
     useEffect(() => {
         let alive = true
         api.getLicenseStatus().then(({ data }) => { if (alive) setInfo(data) }).catch(() => {})
         api.getMobileStatus().then(({ data }) => { if (alive) setMobile(data) }).catch(() => {})
+        loadBackups()
         return () => { alive = false }
     }, [])
+
+    const fileToB64 = (file) => new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(String(r.result).split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(file)
+    })
+    const doExport = async () => {
+        setBMsg('Exporting…')
+        try { const { data } = await api.exportBackup(); setBMsg(data.ok ? `✓ Saved to ${data.path}` : `Error: ${data.error}`) }
+        catch { setBMsg('Export failed.') }
+    }
+    const doRestore = async (name, label) => {
+        if (!window.confirm(`This will replace ALL current data with the backup from ${label}. This cannot be undone.\n\nContinue?`)) return
+        setBMsg('Restoring…')
+        try {
+            const { data } = await api.restoreBackup(name)
+            if (data.ok) { setBMsg('✓ Restored. Reloading…'); await onReload(); loadBackups(); setBMsg('✓ Restore complete.') }
+            else setBMsg(`Error: ${data.error}`)
+        } catch { setBMsg('Restore failed.') }
+    }
+    const doRestoreFile = async (e) => {
+        const file = e.target.files[0]; if (!file) return
+        if (!window.confirm(`This will replace ALL current data with "${file.name}". This cannot be undone.\n\nContinue?`)) { e.target.value = ''; return }
+        setBMsg('Restoring…')
+        try {
+            const b64 = await fileToB64(file)
+            const { data } = await api.restoreUpload(b64)
+            if (data.ok) { setBMsg('✓ Restored. Reloading…'); await onReload(); loadBackups(); setBMsg('✓ Restore complete.') }
+            else setBMsg(`Error: ${data.error}`)
+        } catch { setBMsg('Restore failed.') }
+        e.target.value = ''
+    }
     useEffect(() => {
         if (mobile && mobile.enabled && mobile.url) {
             QRCode.toDataURL(mobile.url, { margin: 1, width: 210 }).then(setQr).catch(() => setQr(''))
@@ -367,6 +405,39 @@ function SettingsPage({ licenseInfo, onDeactivate }) {
                         While it's off, only this computer can reach your data.
                     </p>
                 )}
+            </div>
+
+            {/* ── Backups ── */}
+            <div className="card" style={{ padding: 24, marginTop: 20 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>Backups</h3>
+                <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
+                    A backup is saved automatically every day (the last 30 are kept).
+                </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <button onClick={doExport}
+                        style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+                        Export Backup → Desktop
+                    </button>
+                    <button onClick={() => fileRef.current && fileRef.current.click()}
+                        style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #6C0B25', background: 'transparent', color: '#6C0B25', fontWeight: 600, cursor: 'pointer' }}>
+                        Restore from a .zip file…
+                    </button>
+                    <input ref={fileRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={doRestoreFile} />
+                </div>
+                {bMsg && <div style={{ fontSize: 13, padding: '8px 12px', background: 'var(--cream, #faf7e7)', borderRadius: 8, marginBottom: 12, wordBreak: 'break-all' }}>{bMsg}</div>}
+                <div style={{ maxHeight: 230, overflow: 'auto' }}>
+                    {bks.length === 0
+                        ? <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13 }}>No backups yet.</p>
+                        : bks.map((b) => (
+                            <div key={b.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
+                                <span>{b.date} <span style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12 }}>· {(b.size / 1024).toFixed(0)} KB</span></span>
+                                <button onClick={() => doRestore(b.name, b.date)}
+                                    style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                                    Restore
+                                </button>
+                            </div>
+                        ))}
+                </div>
             </div>
         </div>
     )
@@ -650,7 +721,7 @@ export default function App() {
                         {page === 'vendors'      && <VendorsPage vendors={vendors} onReload={reload} />}
                         {page === 'setup'        && <SetupItemsPage setupItems={setupItems} vendors={vendors} onReload={reload} />}
                         {page === 'events'       && <EventsPage events={events} recipes={recipes} setupItems={setupItems} ingredients={ingredients} onReload={reload} />}
-                        {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} />}
+                        {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} onReload={reload} />}
                     </Suspense>
                 )}
             </div>
