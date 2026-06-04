@@ -285,7 +285,12 @@ function ActivationScreen({ onActivated, info }) {
 // SETTINGS PAGE  (License now; Mobile Access + Backups added in later steps)
 // ─────────────────────────────────────────────────────────
 function SettingsPage({ licenseInfo, onDeactivate }) {
-    const info = licenseInfo || {}
+    const [info, setInfo] = useState(licenseInfo || {})
+    useEffect(() => {
+        let alive = true
+        api.getLicenseStatus().then(({ data }) => { if (alive) setInfo(data) }).catch(() => {})
+        return () => { alive = false }
+    }, [])
     const fmt = (u) => u ? new Date(u * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
     const Row = ({ label, value }) => (
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
@@ -468,7 +473,9 @@ export default function App() {
     }
 
     const handleActivated = async (info) => {
-        setLicenseInfo(info); setLicensed(true)
+        setLicensed(true)
+        try { const { data } = await api.getLicenseStatus(); setLicenseInfo(data) }
+        catch { setLicenseInfo(info) }
         await reload()
     }
 
