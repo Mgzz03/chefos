@@ -110,24 +110,37 @@ let TOKEN   = localStorage.getItem('chefos_admin_token') || '';
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
+// Always read the latest values from the fields, so every action works
+// whether or not you clicked "Connect" first.
+function _conn(){
+  const url = ($('serverUrl').value || URLBASE || '').trim().replace(/\/+$/,'');
+  const tok = ($('adminToken').value || TOKEN || '').trim();
+  URLBASE = url; TOKEN = tok;
+  if(url) localStorage.setItem('chefos_admin_url', url);
+  if(tok) localStorage.setItem('chefos_admin_token', tok);
+  return { url, tok };
+}
+
 async function api(path, method='GET', body){
-  const res = await fetch(URLBASE.replace(/\/+$/,'') + path, {
-    method,
-    headers: { 'content-type':'application/json', 'x-admin-token': TOKEN },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(()=>({ok:false,error:'bad response'}));
+  const { url, tok } = _conn();
+  if(!url || !tok) throw new Error('Enter the Worker URL and Admin token at the top first.');
+  let res;
+  try{
+    res = await fetch(url + path, {
+      method,
+      headers: { 'content-type':'application/json', 'x-admin-token': tok },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }catch(e){
+    throw new Error('Could not reach the server — check the Worker URL and your internet connection.');
+  }
+  const data = await res.json().catch(()=>({ok:false,error:'bad response from server'}));
+  if(res.status===401) throw new Error('Admin token is wrong.');
   if(!res.ok || data.ok===false) throw new Error(data.error || ('HTTP '+res.status));
   return data;
 }
 
-function saveConn(){
-  URLBASE = $('serverUrl').value.trim();
-  TOKEN   = $('adminToken').value.trim();
-  localStorage.setItem('chefos_admin_url', URLBASE);
-  localStorage.setItem('chefos_admin_token', TOKEN);
-  refresh();
-}
+function saveConn(){ _conn(); refresh(); }
 
 function fmtDate(unix){ if(!unix) return '—'; const d=new Date(unix*1000); return d.toISOString().slice(0,10); }
 function copy(txt){ navigator.clipboard.writeText(txt); toast('Copied: '+txt); }
@@ -148,7 +161,8 @@ async function genKey(){
 }
 
 async function refresh(){
-  if(!URLBASE || !TOKEN){ $('conn').textContent='not connected'; return; }
+  const { url, tok } = _conn();
+  if(!url || !tok){ $('conn').textContent='enter Worker URL + Admin token above'; return; }
   try{
     const r = await api('/admin/keys','GET');
     $('conn').textContent = 'connected · '+r.keys.length+' keys';
