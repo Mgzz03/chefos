@@ -161,3 +161,21 @@ All four layers in Settings:
 | CORS | `*` (binds to localhost only) | explicit allow-list |
 | Frontend login | skipped | Supabase login screen |
 | Realtime / PWA | off | on |
+
+---
+
+## 🔍 QA PASS (pre-delivery)
+
+### Phase 1 — Static analysis  ✅
+- All **73 backend routes** resolve; **every frontend api.js call maps to a real
+  endpoint** (no mismatches in either direction).
+- All Pydantic schemas referenced by main.py exist; `import main` succeeds.
+- **No undefined variables/functions** (eslint no-undef = 0); all files parse.
+- Every Supabase call is guarded for local mode (login screen never renders;
+  auth/realtime effects early-return) — no crash in the desktop build.
+- **Removed dead external-AI code** (SYSTEM_PROMPT, buildContext, SYSTEM,
+  generateLocalFallback) — no `anthropic`/AI prompt text remains anywhere.
+- Warnings (non-breaking): unused dev files (api_old.jsx, auth.js, App1.css,
+  backend/license.py, seed.py — none imported); 22 unused-var lints; several
+  intentional `except: pass` for offline tolerance; login-screen tests are N/A
+  for the desktop build (license activation replaces login).
