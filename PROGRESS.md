@@ -179,3 +179,32 @@ All four layers in Settings:
   backend/license.py, seed.py — none imported); 22 unused-var lints; several
   intentional `except: pass` for offline tolerance; login-screen tests are N/A
   for the desktop build (license activation replaces login).
+
+### Phase 2 — Backend API tests  ✅ 63/63
+Wrote `backend/qa_test.py` (stdlib integration suite) against a fresh DB. All
+endpoint groups pass: categories/ingredients (+delete guards), inventory & FIFO
+(earliest-expiry deducted first), all 5 alert types + clear-on-restock, recipe
+cost/simulate/422, cook + cook-to-stock + transactions, cooked stock + waste,
+items (create/cost/simulate/assemble/edit/delete), waste log + summary, vendors
+& setup CRUD, events (cost math verified: food 5.0 + setup 120 = 125), batch
+edit/delete, restock-from-cook.
+
+### Phase 3 — Frontend review  (key behaviours)
+- Simulate slider verified in code: min=base_yield, max=50, step 1; ± step 1;
+  custom scale input `onFocus → select()` (type immediately). ✓
+- **BUG FIXED:** per-recipe `profit_margin` was sent by the Recipes form and shown
+  in Simulate, but the backend dropped it (no column/schema). Added end-to-end
+  (model + migration + schema + create/update/dict). Round-trip 65→50 verified.
+- **BUG FIXED:** duplicate profit-margin input in the recipe form — removed one.
+- Full visual click-through of every page/modal/filter = run the app (data layer
+  is verified via Phase 2).
+
+### Phase 4 — Desktop app  (verified earlier this session)
+- ✔ `.exe` installer builds (GNU toolchain), opens, backend sidecar starts/stops
+  with the window, DB created in AppData, works offline.
+- ✔ License: activation screen on first launch, wrong key → error, correct key
+  activates + persists. 30-day re-check / 60-day offline grace logic unit-tested
+  (40d→active, 70d→locked, expired→locked, wrong-fingerprint→rejected).
+- ⚠ **REQUIRED before delivery:** rebuild the `.exe` so the shipped sidecar
+  includes all Step 2–4 + QA code (the currently-installed installer predates
+  them). Run the "final ship build" with license + Google env set.
