@@ -69,6 +69,7 @@ class RecipeCreate(BaseModel):
     base_yield: Optional[int] = 4
     yield_unit: Optional[str] = "portions"
     notes: Optional[str] = ""
+    profit_margin: Optional[float] = None
     ings: List[RecipeIngredientIn] = []
 
 class RecipeOut(BaseModel):
@@ -78,6 +79,7 @@ class RecipeOut(BaseModel):
     base_yield: int
     yield_unit: str
     notes: str
+    profit_margin: Optional[float] = None
     ings: List[RecipeIngredientIn] = []
     class Config:
         from_attributes = True

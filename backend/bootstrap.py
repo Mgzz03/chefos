@@ -38,3 +38,9 @@ def ensure_local_schema(engine) -> None:
                 conn.execute(text(
                     f"UPDATE {table} SET user_id = 'local' WHERE user_id IS NULL"
                 ))
+
+        # Per-recipe optional profit margin (added after initial release)
+        if "recipes" in existing_tables:
+            rcols = {c["name"] for c in inspector.get_columns("recipes")}
+            if "profit_margin" not in rcols:
+                conn.execute(text("ALTER TABLE recipes ADD COLUMN profit_margin REAL"))

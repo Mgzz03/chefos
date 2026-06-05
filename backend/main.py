@@ -478,7 +478,7 @@ def recipe_to_dict(r: Recipe, db: Session) -> dict:
             for ri in r.ingredients]
     return {"id": r.id, "name": r.name, "category": r.category,
             "base_yield": r.base_yield, "yield_unit": r.yield_unit,
-            "notes": r.notes, "ings": ings}
+            "notes": r.notes, "profit_margin": r.profit_margin, "ings": ings}
 
 @app.get("/recipes")
 def list_recipes(db: Session = Depends(get_db), user_id: str = Depends(get_current_user)):
@@ -492,7 +492,7 @@ def list_recipes(db: Session = Depends(get_db), user_id: str = Depends(get_curre
 def create_recipe(data: RecipeCreate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)):
     r = Recipe(id=new_id(), name=data.name, category=data.category,
                base_yield=data.base_yield, yield_unit=data.yield_unit,
-               notes=data.notes, user_id=user_id)
+               notes=data.notes, profit_margin=data.profit_margin, user_id=user_id)
     db.add(r)
     for ri in data.ings:
         db.add(RecipeIngredient(id=new_id(), recipe_id=r.id,
@@ -508,6 +508,7 @@ def update_recipe(recipe_id: str, data: RecipeCreate, db: Session = Depends(get_
         raise HTTPException(404, "Not found")
     r.name = data.name; r.category = data.category
     r.base_yield = data.base_yield; r.yield_unit = data.yield_unit; r.notes = data.notes
+    r.profit_margin = data.profit_margin
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
     for ri in data.ings:
         db.add(RecipeIngredient(id=new_id(), recipe_id=recipe_id,

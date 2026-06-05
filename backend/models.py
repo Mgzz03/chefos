@@ -68,6 +68,7 @@ class Recipe(Base):
     base_yield = Column(Integer, nullable=False, default=4)
     yield_unit = Column(String, default="portions")
     notes      = Column(Text, default="")
+    profit_margin = Column(Float, nullable=True)   # optional per-recipe target margin %
     user_id    = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 

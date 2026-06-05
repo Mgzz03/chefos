@@ -134,15 +134,6 @@ export function Recipes({ ingredients, categories, recipes, onReload, setPage, s
               <span className="muted">% — a 65% margin means food cost is 35% of sell price</span>
             </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">Profit Margin % <span style={{color:'var(--ink-mute)',fontWeight:400,textTransform:'none',fontSize:11}}>(optional — used to suggest selling price)</span></label>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <input className="form-input" type="number" min={0} max={99} step={1} value={form.profit_margin}
-                placeholder="e.g. 65 means 65% of sell price is profit"
-                onChange={e=>setForm({...form,profit_margin:e.target.value})} style={{flex:1}}/>
-              {form.profit_margin!==''&&<span className="muted" style={{whiteSpace:'nowrap'}}>= {form.profit_margin}% margin</span>}
-            </div>
-          </div>
           <div className="divider"/>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <div className="card-title" style={{margin:0}}>Ingredients</div>
