@@ -7,6 +7,11 @@ kv_namespaces = [
   { binding = "LICENSES", id = "5e0830bec0744df9bb202c8d7cbec4c3" }
 ]
 
+# Cloudflare Workers AI — powers the online AI assistant (free tier).
+# Nothing to fill in; the binding is provisioned automatically on deploy.
+[ai]
+binding = "AI"
+
 # Secrets are NOT stored here. Set them with:
 #   wrangler secret put JWT_SECRET
 #   wrangler secret put ADMIN_TOKEN

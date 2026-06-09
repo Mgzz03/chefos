@@ -138,6 +138,19 @@ class Event(Base):
                                cascade="all, delete-orphan")
     setup_items = relationship("EventSetupItem", back_populates="event",
                                cascade="all, delete-orphan")
+    items       = relationship("EventItem", back_populates="event",
+                               cascade="all, delete-orphan")
+
+
+class EventItem(Base):
+    __tablename__ = "event_items"
+    id        = Column(String, primary_key=True)
+    event_id  = Column(String, ForeignKey("events.id"), nullable=False)
+    item_id   = Column(String, ForeignKey("items.id"), nullable=False)
+    quantity  = Column(Float, default=1)
+
+    event = relationship("Event", back_populates="items")
+    item  = relationship("Item")
 
 
 class EventRecipe(Base):

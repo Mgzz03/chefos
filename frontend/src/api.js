@@ -19,6 +19,13 @@ const LOCAL = import.meta.env.VITE_LOCAL_MODE === 'true'
 
 const api = axios.create({ baseURL: BASE_URL })
 
+// In the desktop app the backend auto-picks a free port (8000, else 8001…).
+// App.jsx probes for it on boot and calls this so every request targets it.
+export function setApiBase(url) { api.defaults.baseURL = url }
+export function getApiBase() { return api.defaults.baseURL }
+// Ports the desktop UI will probe for the local backend.
+export const LOCAL_API_CANDIDATES = Array.from({ length: 11 }, (_, i) => `http://127.0.0.1:${8000 + i}`)
+
 // ── Attach Supabase JWT to every request (cloud build only) ─
 api.interceptors.request.use(async config => {
     if (!LOCAL && supabase) {
@@ -73,6 +80,7 @@ export async function flushOfflineQueue() {
 }
 
 // ── License (local desktop activation) ────────────────────
+export const askAI             = (question) => api.post('/ai', { question })
 export const getLicenseStatus  = ()    => api.get('/license/status')
 export const activateLicense   = (key) => api.post('/license/activate', { key })
 export const deactivateLicense = ()    => api.post('/license/deactivate')

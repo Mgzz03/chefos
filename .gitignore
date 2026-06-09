@@ -49,3 +49,8 @@ backups/
 backend/branding.json
 backend/mobile_access.json
 backend/chefos.license
+updater-private.key
+updater-private.key.pub
+
+# Generated per-release (upload to GitHub, do not commit)
+latest.json

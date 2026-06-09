@@ -716,11 +716,19 @@ export function AIAssistantPage({ ingredients, recipes, items, events, alerts, s
     setMessages(newMessages)
     setThinking(true)
 
-    const answer = mgzzAnswer(text, ingredients, recipes, items, events, alerts)
-    setTimeout(() => {
-      setMessages(m => [...m, { role: 'ai', text: answer, time: new Date() }])
-      setThinking(false)
-    }, 300)
+    // Try the online AI first (richer answers: substitutions, techniques,
+    // nutrition, free-form questions). It already knows the chef's data via the
+    // backend. Fall back to the instant offline engine if offline or it fails.
+    let answer = null
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      try {
+        const { data } = await api.askAI(text)
+        if (data && data.ok && data.answer) answer = data.answer.trim()
+      } catch { /* offline / server issue → fall back below */ }
+    }
+    if (!answer) answer = mgzzAnswer(text, ingredients, recipes, items, events, alerts)
+    setMessages(m => [...m, { role: 'ai', text: answer, time: new Date() }])
+    setThinking(false)
   }
 
   const formatTime = d => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })

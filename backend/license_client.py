@@ -151,6 +151,18 @@ def activate(key: str) -> dict:
     return {"ok": True, "chef_name": rec["chef_name"]}
 
 
+def get_license_key() -> str:
+    """Return the activated license key bound to this device, or '' if none."""
+    fp = get_fingerprint()
+    lf = _license_file()
+    if not lf.exists():
+        return ""
+    rec = _unseal(lf.read_text(), fp)
+    if not rec or rec.get("fingerprint") != fp:
+        return ""
+    return rec.get("key", "")
+
+
 def status() -> dict:
     fp = get_fingerprint()
     lf = _license_file()

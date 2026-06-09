@@ -139,6 +139,10 @@ class EventSetupItemIn(BaseModel):
     quantity: float
     hours: float
 
+class EventItemIn(BaseModel):
+    item_id: str
+    quantity: float
+
 class EventCreate(BaseModel):
     name: str
     event_date: Optional[date] = None
@@ -146,6 +150,7 @@ class EventCreate(BaseModel):
     guest_count: Optional[int] = 0
     notes: Optional[str] = ""
     recipes: List[EventRecipeIn] = []
+    items: List[EventItemIn] = []
     setup_items: List[EventSetupItemIn] = []
 
 class EventOut(BaseModel):
@@ -157,6 +162,7 @@ class EventOut(BaseModel):
     notes: str
     status: str
     recipes: List[EventRecipeIn] = []
+    items: List[EventItemIn] = []
     setup_items: List[EventSetupItemIn] = []
     class Config:
         from_attributes = True

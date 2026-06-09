@@ -12,6 +12,9 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [{ "name": "binaries/chefos-backend", "sidecar": true }]
-    }
+    },
+    "updater:default",
+    "process:default",
+    "process:allow-restart"
   ]
 }

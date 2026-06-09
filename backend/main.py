@@ -1,4 +1,7 @@
 import os
+import json
+import urllib.request
+import urllib.error
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
@@ -14,7 +17,7 @@ import backups
 import gdrive
 import threading
 from models import (Category, Ingredient, InventoryBatch, Recipe, RecipeIngredient,
-                    Vendor, SetupItem, Event, EventRecipe, EventSetupItem, Transaction,
+                    Vendor, SetupItem, Event, EventRecipe, EventSetupItem, EventItem, Transaction,
                     CookedStock, Item, ItemSubRecipe, ItemIngredient, WasteLog)
 from schemas import (CategoryCreate, CategoryOut,
                      IngredientCreate, IngredientOut,
@@ -74,6 +77,69 @@ def license_activate(body: dict):
 @app.post("/license/deactivate")
 def license_deactivate():
     return license_client.deactivate()
+
+
+# ── AI assistant (online) — routes the chef's question + a summary of THEIR
+#    data through the license Worker to Cloudflare AI. License-gated server-side.
+def _build_ai_context(db: Session, user_id: str) -> str:
+    lines = []
+    ings = {i.id: i for i in db.query(Ingredient).filter(Ingredient.user_id == user_id).all()}
+    recipes = (db.query(Recipe).options(joinedload(Recipe.ingredients))
+               .filter(Recipe.user_id == user_id).all())
+    lines.append("RECIPES (name | yield | cost/portion | ingredients):")
+    for r in recipes[:40]:
+        cost, parts = 0.0, []
+        for ri in r.ingredients:
+            ing = ings.get(ri.ingredient_id)
+            if ing:
+                cost += ri.qty * (ing.cost or 0)
+                parts.append(f"{ing.name} {ri.qty:g}{ri.unit}")
+        pp = cost / r.base_yield if r.base_yield else cost
+        marg = f" | target margin {r.profit_margin:g}%" if r.profit_margin else ""
+        lines.append(f"- {r.name} | {r.base_yield:g} {r.yield_unit} | EGP {pp:.2f}/portion{marg} | "
+                     + ", ".join(parts[:12]))
+    low = []
+    for ing in ings.values():
+        stock = ing.stock
+        if stock <= 0:
+            low.append(f"{ing.name}: OUT")
+        elif ing.threshold and stock < ing.threshold:
+            low.append(f"{ing.name}: low ({stock:g}{ing.unit})")
+    if low:
+        lines.append("\nLOW / OUT OF STOCK: " + "; ".join(low[:30]))
+    total_val = sum((ing.stock * (ing.cost or 0)) for ing in ings.values())
+    lines.append(f"\nTOTAL INVENTORY VALUE: EGP {total_val:.2f}")
+    return "\n".join(lines)
+
+
+@app.post("/ai")
+def ai_assistant(body: dict, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)):
+    question = (body.get("question") or "").strip()
+    if not question:
+        return {"ok": False, "error": "Empty question"}
+    url = (getattr(license_client, "LICENSE_URL", "") or "").rstrip("/")
+    if not url:
+        return {"ok": False, "error": "The AI is not set up in this build."}
+    key = license_client.get_license_key()
+    if not key:
+        return {"ok": False, "error": "Activate your license to use the online AI."}
+    context = _build_ai_context(db, user_id)
+    try:
+        payload = json.dumps({"key": key, "question": question[:1500], "context": context}).encode()
+        req = urllib.request.Request(url + "/ai", data=payload,
+                                     headers={"content-type": "application/json",
+                                              # Cloudflare blocks the default Python UA (error 1010)
+                                              "User-Agent": "ChefOS/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # The Worker replied with a real error (e.g. 403 inactive license) — surface it.
+        try:
+            return json.loads(e.read().decode())
+        except Exception:
+            return {"ok": False, "error": f"AI service error ({e.code})."}
+    except Exception:
+        return {"ok": False, "error": "Could not reach the AI service. Check your internet connection."}
 
 
 # ── Backups (local) ────────────────────────────────────────
@@ -670,6 +736,25 @@ def delete_setup_item(sid: str, db: Session = Depends(get_db), user_id: str = De
 # EVENTS
 # ─────────────────────────────────────────────────────────
 
+def _item_unit_cost(item: Item, db: Session, user_id: str) -> float:
+    """Cost of ONE finished unit of this item (its batch cost ÷ base yield)."""
+    batch = 0.0
+    for sr in item.sub_recipes:
+        cs_rows = (db.query(CookedStock)
+                   .filter(CookedStock.recipe_id == sr.recipe_id,
+                           CookedStock.user_id == user_id,
+                           CookedStock.is_depleted == False)
+                   .all())
+        total_q = sum(c.quantity for c in cs_rows)
+        total_c = sum(c.cost_snapshot for c in cs_rows)
+        if total_q > 0:
+            batch += (total_c / total_q) * sr.quantity
+    for si in item.sub_ings:
+        ing = db.query(Ingredient).filter(Ingredient.id == si.ingredient_id, Ingredient.user_id == user_id).first()
+        if ing:
+            batch += si.qty * ing.cost
+    return batch / item.base_yield if item.base_yield else batch
+
 def event_cost(event: Event, db: Session, user_id: str) -> dict:
     food_cost = 0
     setup_cost = 0
@@ -682,6 +767,12 @@ def event_cost(event: Event, db: Session, user_id: str) -> dict:
             ing = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id, Ingredient.user_id == user_id).first()
             if ing:
                 food_cost += ri.qty * scale * ing.cost
+    for ei in event.items:
+        it = (db.query(Item)
+              .options(joinedload(Item.sub_recipes), joinedload(Item.sub_ings))
+              .filter(Item.id == ei.item_id, Item.user_id == user_id).first())
+        if it:
+            food_cost += _item_unit_cost(it, db, user_id) * ei.quantity
     for esi in event.setup_items:
         s = db.query(SetupItem).filter(SetupItem.id == esi.setup_item_id, SetupItem.user_id == user_id).first()
         if s:
@@ -691,6 +782,7 @@ def event_cost(event: Event, db: Session, user_id: str) -> dict:
 
 def event_to_dict(ev: Event, db: Session, user_id: str) -> dict:
     recipes = [{"recipe_id": er.recipe_id, "portions": er.portions} for er in ev.recipes]
+    items   = [{"item_id": ei.item_id, "quantity": ei.quantity} for ei in ev.items]
     setup   = [{"setup_item_id": esi.setup_item_id, "quantity": esi.quantity, "hours": esi.hours} for esi in ev.setup_items]
     costs   = event_cost(ev, db, user_id)
     return {
@@ -698,7 +790,7 @@ def event_to_dict(ev: Event, db: Session, user_id: str) -> dict:
         "event_date": ev.event_date.isoformat() if ev.event_date else None,
         "duration_hrs": ev.duration_hrs, "guest_count": ev.guest_count,
         "notes": ev.notes, "status": ev.status,
-        "recipes": recipes, "setup_items": setup,
+        "recipes": recipes, "items": items, "setup_items": setup,
         **costs,
     }
 
@@ -706,7 +798,7 @@ def event_to_dict(ev: Event, db: Session, user_id: str) -> dict:
 def list_events(db: Session = Depends(get_db), user_id: str = Depends(get_current_user)):
     events = (db.query(Event)
               .filter(Event.user_id == user_id)
-              .options(joinedload(Event.recipes), joinedload(Event.setup_items))
+              .options(joinedload(Event.recipes), joinedload(Event.items), joinedload(Event.setup_items))
               .order_by(Event.event_date.desc().nullslast())
               .all())
     return [event_to_dict(ev, db, user_id) for ev in events]
@@ -720,13 +812,16 @@ def create_event(data: EventCreate, db: Session = Depends(get_db), user_id: str 
     for er in data.recipes:
         db.add(EventRecipe(id=new_id(), event_id=ev.id,
                            recipe_id=er.recipe_id, portions=er.portions))
+    for ei in data.items:
+        db.add(EventItem(id=new_id(), event_id=ev.id,
+                         item_id=ei.item_id, quantity=ei.quantity))
     for esi in data.setup_items:
         db.add(EventSetupItem(id=new_id(), event_id=ev.id,
                               setup_item_id=esi.setup_item_id,
                               quantity=esi.quantity, hours=esi.hours))
     db.commit()
     ev = (db.query(Event)
-          .options(joinedload(Event.recipes), joinedload(Event.setup_items))
+          .options(joinedload(Event.recipes), joinedload(Event.items), joinedload(Event.setup_items))
           .filter(Event.id == ev.id).first())
     return event_to_dict(ev, db, user_id)
 
@@ -739,16 +834,19 @@ def update_event(eid: str, data: EventCreate, db: Session = Depends(get_db), use
     ev.duration_hrs = data.duration_hrs; ev.guest_count = data.guest_count
     ev.notes = data.notes
     db.query(EventRecipe).filter(EventRecipe.event_id == eid).delete()
+    db.query(EventItem).filter(EventItem.event_id == eid).delete()
     db.query(EventSetupItem).filter(EventSetupItem.event_id == eid).delete()
     for er in data.recipes:
         db.add(EventRecipe(id=new_id(), event_id=eid, recipe_id=er.recipe_id, portions=er.portions))
+    for ei in data.items:
+        db.add(EventItem(id=new_id(), event_id=eid, item_id=ei.item_id, quantity=ei.quantity))
     for esi in data.setup_items:
         db.add(EventSetupItem(id=new_id(), event_id=eid,
                               setup_item_id=esi.setup_item_id,
                               quantity=esi.quantity, hours=esi.hours))
     db.commit()
     ev = (db.query(Event)
-          .options(joinedload(Event.recipes), joinedload(Event.setup_items))
+          .options(joinedload(Event.recipes), joinedload(Event.items), joinedload(Event.setup_items))
           .filter(Event.id == eid).first())
     return event_to_dict(ev, db, user_id)
 

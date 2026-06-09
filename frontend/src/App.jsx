@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import * as api from './api'
 import { flushOfflineQueue } from './api'
+import { checkForUpdate } from './updater'
 import { supabase } from './supabase'
 import QRCode from 'qrcode'
 import './index.css'
@@ -191,6 +192,59 @@ function LoginScreen() {
                     {mode !== 'signup'  && <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setMode('signup'); setError('') }}>Create account</span>}
                     {mode !== 'forgot'  && <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setMode('forgot'); setError('') }}>Forgot password</span>}
                 </div>
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────
+// STARTING / BACKEND-DOWN SCREENS (local desktop)
+// ─────────────────────────────────────────────────────────
+const _SC = { cream: '#FAF7E7', espresso: '#2E1A0E', ruby: '#6C0B25', gold: '#c8922a', line: '#e3dcc4', mute: '#7a6f5a' }
+
+function StartingScreen() {
+    return (
+        <div style={{ minHeight: '100vh', background: _SC.cream, color: _SC.espresso,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'Inter, system-ui, sans-serif', gap: 14 }}>
+            <div style={{ fontSize: 52 }}>👨‍🍳</div>
+            <div style={{ fontFamily: '"Cormorant Garamond", Georgia, serif', fontSize: 34 }}>ChefOS</div>
+            <div style={{ color: _SC.mute, fontSize: 14 }}>Starting your kitchen… this can take a moment on first launch.</div>
+            <div style={{ width: 38, height: 38, marginTop: 6, border: `3px solid ${_SC.line}`,
+                          borderTopColor: _SC.gold, borderRadius: '50%', animation: 'chefspin 0.9s linear infinite' }} />
+            <style>{`@keyframes chefspin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+    )
+}
+
+function BackendDownScreen({ onRetry }) {
+    return (
+        <div style={{ minHeight: '100vh', background: _SC.cream, color: _SC.espresso,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'Inter, system-ui, sans-serif', padding: 20 }}>
+            <div style={{ width: 460, maxWidth: '100%', background: '#fff', border: `1px solid ${_SC.line}`,
+                          borderRadius: 18, padding: '34px 32px', boxShadow: '0 24px 60px rgba(46,26,14,.12)' }}>
+                <div style={{ fontSize: 42, textAlign: 'center' }}>🍳</div>
+                <h1 style={{ fontFamily: '"Cormorant Garamond", Georgia, serif', fontSize: 30, textAlign: 'center',
+                             margin: '8px 0 6px' }}>Couldn’t start the kitchen service</h1>
+                <p style={{ color: _SC.mute, fontSize: 14, lineHeight: 1.6, margin: '0 0 16px', textAlign: 'center' }}>
+                    ChefOS runs a small service in the background and it didn’t answer in time.
+                    This is almost always temporary.
+                </p>
+                <ol style={{ color: _SC.espresso, fontSize: 13.5, lineHeight: 1.7, paddingLeft: 20, margin: '0 0 18px' }}>
+                    <li>Wait 10 seconds and click <b>Try again</b> (first launch can be slow).</li>
+                    <li>If Windows asked about a firewall, click <b>Allow</b>.</li>
+                    <li>If your antivirus flagged ChefOS, allow / restore it, then reopen.</li>
+                    <li>Close ChefOS completely and open it again from the Start Menu.</li>
+                </ol>
+                <button onClick={onRetry} style={{ width: '100%', padding: '12px', background: _SC.ruby, color: '#fff',
+                            border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+                    Try again
+                </button>
+                <p style={{ color: _SC.mute, fontSize: 11.5, marginTop: 14, textAlign: 'center' }}>
+                    Still stuck? Send us the file <b>backend.log</b> from the folder
+                    <br /><code>%AppData%\Roaming\ChefOS</code> and we’ll sort it out.
+                </p>
             </div>
         </div>
     )
@@ -471,6 +525,15 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
                 <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12, marginTop: 10, marginBottom: 0 }}>
                     Deactivating frees this license so it can be used on another computer.
                 </p>
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line, #e3dcc4)' }}>
+                    <Row label="App version" value="1.0.2" />
+                    <button onClick={() => checkForUpdate({ silent: false })}
+                        style={{ marginTop: 12, padding: '10px 16px', borderRadius: 9,
+                                 border: '1px solid var(--line, #e3dcc4)', background: '#fff',
+                                 color: 'var(--ink, #2E1A0E)', fontWeight: 600, cursor: 'pointer' }}>
+                        Check for updates
+                    </button>
+                </div>
             </div>
 
             {/* ── Mobile Access (same-WiFi) ── */}
@@ -632,6 +695,7 @@ export default function App() {
     const [licenseReady, setLicenseReady] = useState(!LOCAL)
     const [licensed, setLicensed]         = useState(!LOCAL)
     const [licenseInfo, setLicenseInfo]   = useState(null)
+    const [backendUp, setBackendUp]       = useState(!LOCAL)
     const [branding, setBranding]         = useState({ name: '', logo: '' })
 
     const reload = useCallback(async () => {
@@ -671,10 +735,31 @@ export default function App() {
         let cancelled = false
         const boot = async () => {
             if (LOCAL) {
-                const base = import.meta.env.VITE_API_URL || ''
-                for (let i = 0; i < 40 && !cancelled; i++) {
-                    try { await fetch(`${base}/health`); break }
-                    catch { await new Promise(r => setTimeout(r, 500)) }
+                // The phone (LAN) loaded the app FROM the backend, so it's same-origin
+                // and already up — only the desktop webview needs to find the local port.
+                const host = (typeof window !== 'undefined' && window.location) ? window.location.hostname : 'localhost'
+                const isDesktop = host === 'localhost' || host === '127.0.0.1' || host.endsWith('tauri.localhost')
+                if (isDesktop) {
+                    // The bundled backend auto-picks 8000, or 8001… if 8000 is busy,
+                    // and the one-file build can be slow to unpack on first launch +
+                    // antivirus scan — so probe the whole range, patiently (~90s).
+                    const candidates = api.LOCAL_API_CANDIDATES
+                    let found = null
+                    for (let i = 0; i < 180 && !cancelled && !found; i++) {
+                        for (const b of candidates) {
+                            try {
+                                const r = await fetch(`${b}/health`, { cache: 'no-store' })
+                                if (r.ok) { found = b; break }
+                            } catch { /* not up yet on this port */ }
+                        }
+                        if (!found) await new Promise(r => setTimeout(r, 500))
+                    }
+                    if (found) { api.setApiBase(found); setBackendUp(true) }
+                    else { setBackendUp(false) }
+                } else {
+                    // Phone/tablet on the LAN: the page was served BY the backend,
+                    // so it's same-origin and already reachable.
+                    setBackendUp(true)
                 }
                 // ── License gate: only load the app if this device is activated ──
                 try {
@@ -695,6 +780,12 @@ export default function App() {
         boot()
         return () => { cancelled = true }
     }, [session, reload])
+
+    // ── Check for a newer signed build once after launch (desktop only) ──
+    useEffect(() => {
+        const t = setTimeout(() => { checkForUpdate({ silent: true }) }, 8000)
+        return () => clearTimeout(t)
+    }, [])
 
     // ── Online / offline + sync queue ─────────────────────
     useEffect(() => {
@@ -803,7 +894,8 @@ export default function App() {
     // ── Show login if not authenticated ───────────────────
     if (!authReady) return null   // avoid flash while session loads
     if (!session)   return <LoginScreen />
-    if (LOCAL && !licenseReady) return null   // checking license
+    if (LOCAL && !licenseReady) return <StartingScreen />          // booting the local backend
+    if (LOCAL && !backendUp)    return <BackendDownScreen onRetry={() => window.location.reload()} />
     if (LOCAL && !licensed)     return <ActivationScreen onActivated={handleActivated} info={licenseInfo} />
 
     return (
@@ -906,7 +998,7 @@ export default function App() {
                         {page === 'categories'   && <CategoriesPage categories={categories} onReload={reload} />}
                         {page === 'vendors'      && <VendorsPage vendors={vendors} onReload={reload} />}
                         {page === 'setup'        && <SetupItemsPage setupItems={setupItems} vendors={vendors} onReload={reload} />}
-                        {page === 'events'       && <EventsPage events={events} recipes={recipes} setupItems={setupItems} ingredients={ingredients} onReload={reload} />}
+                        {page === 'events'       && <EventsPage events={events} recipes={recipes} items={items} setupItems={setupItems} ingredients={ingredients} onReload={reload} />}
                         {page === 'settings'     && <SettingsPage licenseInfo={licenseInfo} onDeactivate={handleDeactivate} onReload={reload} branding={branding} onBrandingChange={applyBranding} />}
                     </Suspense>
                 )}

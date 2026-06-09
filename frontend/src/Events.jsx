@@ -229,11 +229,11 @@ export function SetupItemsPage({ setupItems, vendors, onReload }) {
 // ─────────────────────────────────────────────────────────
 // EVENTS
 // ─────────────────────────────────────────────────────────
-export function EventsPage({ events, recipes, setupItems, ingredients, onReload }) {
+export function EventsPage({ events, recipes, items = [], setupItems, ingredients, onReload }) {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [detailId, setDetailId] = useState(null)
-  const [form, setForm] = useState({ name:'', event_date:'', duration_hrs:4, guest_count:0, notes:'', recipes:[], setup_items:[] })
+  const [form, setForm] = useState({ name:'', event_date:'', duration_hrs:4, guest_count:0, notes:'', recipes:[], items:[], setup_items:[] })
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
 
@@ -261,10 +261,19 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
     return total
   }
 
+  const calcItemsCost = (eventItems) => {
+    let total = 0
+    eventItems.forEach(ei => {
+      const it = items.find(x=>x.id===ei.item_id)
+      if (it) total += (parseFloat(ei.quantity)||0) * (it.cost_per_unit||0)
+    })
+    return total
+  }
+
   // ── modal helpers ──────────────────────────────────────
   const openNew = () => {
     setEditing(null)
-    setForm({ name:'', event_date:'', duration_hrs:4, guest_count:0, notes:'', recipes:[], setup_items:[] })
+    setForm({ name:'', event_date:'', duration_hrs:4, guest_count:0, notes:'', recipes:[], items:[], setup_items:[] })
     setError(''); setModal(true)
   }
 
@@ -274,6 +283,7 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
       name:ev.name, event_date:ev.event_date||'',
       duration_hrs:ev.duration_hrs, guest_count:ev.guest_count, notes:ev.notes,
       recipes: ev.recipes.map(r=>({recipe_id:r.recipe_id,portions:r.portions})),
+      items: (ev.items||[]).map(i=>({item_id:i.item_id,quantity:i.quantity})),
       setup_items: ev.setup_items.map(s=>({setup_item_id:s.setup_item_id,quantity:s.quantity,hours:s.hours}))
     })
     setError(''); setModal(true)
@@ -287,6 +297,7 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
       guest_count: parseInt(form.guest_count)||0,
       event_date: form.event_date || null,
       recipes: form.recipes.filter(r=>r.recipe_id&&r.portions>0),
+      items: form.items.filter(i=>i.item_id&&i.quantity>0),
       setup_items: form.setup_items.filter(s=>s.setup_item_id&&s.quantity>0&&s.hours>0)
     }
     try {
@@ -314,14 +325,19 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
   const updateRecipeRow = (idx, field, val) => setForm(f=>({...f, recipes:f.recipes.map((r,i)=>i===idx?{...r,[field]:val}:r)}))
   const removeRecipeRow = (idx) => setForm(f=>({...f, recipes:f.recipes.filter((_,i)=>i!==idx)}))
 
+  const addItemRow = () => setForm(f=>({...f, items:[...f.items,{item_id:'',quantity:1}]}))
+  const updateItemRow = (idx, field, val) => setForm(f=>({...f, items:f.items.map((r,i)=>i===idx?{...r,[field]:val}:r)}))
+  const removeItemRow = (idx) => setForm(f=>({...f, items:f.items.filter((_,i)=>i!==idx)}))
+
   const addSetupRow = () => setForm(f=>({...f, setup_items:[...f.setup_items,{setup_item_id:'',quantity:1,hours:f.duration_hrs||4}]}))
   const updateSetupRow = (idx, field, val) => setForm(f=>({...f, setup_items:f.setup_items.map((s,i)=>i===idx?{...s,[field]:val}:s)}))
   const removeSetupRow = (idx) => setForm(f=>({...f, setup_items:f.setup_items.filter((_,i)=>i!==idx)}))
 
   // ── live cost preview ──────────────────────────────────
   const previewFood = calcFoodCost(form.recipes.map(r=>({...r,portions:parseInt(r.portions)||0})))
+  const previewItems = calcItemsCost(form.items)
   const previewSetup = calcSetupCost(form.setup_items.map(s=>({...s,quantity:parseFloat(s.quantity)||0,hours:parseFloat(s.hours)||0})))
-  const previewTotal = previewFood + previewSetup
+  const previewTotal = previewFood + previewItems + previewSetup
 
   // ── filter ─────────────────────────────────────────────
   const filtered = events.filter(ev => filterStatus==='All' || ev.status===filterStatus.toLowerCase())
@@ -366,6 +382,7 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
                 {ev.event_date && `📅 ${ev.event_date} · `}
                 ⏱ {ev.duration_hrs}h · 👥 {ev.guest_count} guests ·
                 {ev.recipes.length} recipe{ev.recipes.length!==1?'s':''} ·
+                {(ev.items?.length||0)} item{(ev.items?.length||0)!==1?'s':''} ·
                 {ev.setup_items.length} setup item{ev.setup_items.length!==1?'s':''}
               </div>
             </div>
@@ -406,6 +423,21 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
                       <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
                         <span>{r.name}</span>
                         <span>{er.portions} portions · <b>EGP {cost.toFixed(2)}</b></span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div>
+                  <div className="card-title">Items</div>
+                  {(ev.items?.length||0) === 0 && <div className="muted">No items added</div>}
+                  {(ev.items||[]).map((ei,i) => {
+                    const it = items.find(x=>x.id===ei.item_id)
+                    if (!it) return null
+                    const cost = (ei.quantity||0) * (it.cost_per_unit||0)
+                    return (
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
+                        <span>{it.name}</span>
+                        <span>{ei.quantity}× · <b>EGP {cost.toFixed(2)}</b></span>
                       </div>
                     )
                   })}
@@ -487,6 +519,33 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
 
           <div className="divider"/>
 
+          {/* Items (finished products) */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div className="card-title" style={{margin:0}}>Items</div>
+            <button className="btn btn-sm" onClick={addItemRow}>+ Add Item</button>
+          </div>
+          {form.items.map((row,idx) => {
+            const it = items.find(x=>x.id===row.item_id)
+            const cost = it ? (parseFloat(row.quantity)||0)*(it.cost_per_unit||0) : 0
+            return (
+              <div key={idx} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
+                <select className="form-select" style={{flex:3}} value={row.item_id}
+                  onChange={e=>updateItemRow(idx,'item_id',e.target.value)}>
+                  <option value="">— select item —</option>
+                  {items.map(it=><option key={it.id} value={it.id}>{it.name} (EGP {(it.cost_per_unit||0).toFixed(2)}/{it.yield_unit||'unit'})</option>)}
+                </select>
+                <input className="form-input" type="number" min="1" placeholder="Qty" style={{flex:1}}
+                  value={row.quantity} onChange={e=>updateItemRow(idx,'quantity',parseFloat(e.target.value)||1)}/>
+                {cost > 0 && <span className="gold-text" style={{minWidth:60,textAlign:'right'}}>EGP {cost.toFixed(2)}</span>}
+                <button className="btn btn-sm btn-danger" onClick={()=>removeItemRow(idx)}>✕</button>
+              </div>
+            )
+          })}
+          {items.length === 0 && <div className="muted" style={{marginBottom:8}}>No items exist yet — create some on the Items page first.</div>}
+          {items.length > 0 && form.items.length === 0 && <div className="muted" style={{marginBottom:8}}>No items added yet.</div>}
+
+          <div className="divider"/>
+
           {/* Setup Items */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <div className="card-title" style={{margin:0}}>Setup Items</div>
@@ -518,9 +577,10 @@ export function EventsPage({ events, recipes, setupItems, ingredients, onReload 
           {form.setup_items.length === 0 && <div className="muted" style={{marginBottom:8}}>No setup items added yet.</div>}
 
           {/* Live cost preview */}
-          {(previewFood > 0 || previewSetup > 0) && (
+          {(previewFood > 0 || previewItems > 0 || previewSetup > 0) && (
             <div className="cost-box" style={{marginTop:12}}>
-              <div className="cost-line"><span>Food cost</span><span>EGP {previewFood.toFixed(2)}</span></div>
+              <div className="cost-line"><span>Food / recipes cost</span><span>EGP {previewFood.toFixed(2)}</span></div>
+              {previewItems > 0 && <div className="cost-line"><span>Items cost</span><span>EGP {previewItems.toFixed(2)}</span></div>}
               <div className="cost-line"><span>Setup cost</span><span>EGP {previewSetup.toFixed(2)}</span></div>
               <div className="cost-line"><span>Total event cost</span><span style={{color:'var(--warning)',fontSize:16}}>EGP {previewTotal.toFixed(2)}</span></div>
               {form.guest_count > 0 && (

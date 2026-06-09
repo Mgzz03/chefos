@@ -123,6 +123,42 @@ export default {
         return json({ ok: true });
       }
 
+      // ───────────────────────── AI ASSISTANT ───────────────────
+      // Free, server-side LLM (Cloudflare Workers AI). Gated behind an active
+      // license so the free quota isn't abused. The app sends a compact summary
+      // of the chef's own data as `context`, plus the question.
+      if (method === 'POST' && path === '/ai') {
+        const { key, question, context } = await request.json();
+        if (!question) return json({ ok: false, error: 'Missing question' }, 400);
+        const rec = await getRec(env, key);
+        if (!rec || !rec.is_active) return json({ ok: false, error: 'Inactive or invalid license' }, 403);
+        if (rec.expires_at && now() > rec.expires_at) return json({ ok: false, error: 'License expired' }, 403);
+        if (!env.AI) return json({ ok: false, error: 'AI is not enabled on this server' }, 503);
+
+        const sys =
+          "You are ChefOS's kitchen assistant for a professional chef. " +
+          "Use the chef's own data below when relevant (recipes, ingredients, stock, costs). " +
+          "You may also use general culinary knowledge: substitutions, techniques, food safety, " +
+          "nutrition, flavour pairings, yields and scaling. Be concise and practical, use short " +
+          "bullet points, and prices are in EGP. If the data doesn't cover something, say so briefly.\n\n" +
+          "CHEF'S DATA:\n" + String(context || '(none provided)').slice(0, 6000);
+
+        try {
+          const out = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: 'system', content: sys },
+              { role: 'user', content: String(question).slice(0, 1500) },
+            ],
+            max_tokens: 800,
+          });
+          const answer = (out && (out.response || out.result || out.text)) || '';
+          if (!answer) return json({ ok: false, error: 'No answer' }, 502);
+          return json({ ok: true, answer });
+        } catch (e) {
+          return json({ ok: false, error: 'AI error: ' + (e && e.message || e) }, 502);
+        }
+      }
+
       // ───────────────────────── ADMIN ─────────────────────────
       if (path.startsWith('/admin')) {
         if (request.headers.get('x-admin-token') !== env.ADMIN_TOKEN)
