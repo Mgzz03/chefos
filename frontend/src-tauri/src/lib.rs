@@ -1,3 +1,5 @@
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -5,6 +7,15 @@ use tauri_plugin_shell::ShellExt;
 
 /// Holds the running backend child so we can kill it when the window closes.
 struct BackendProcess(Mutex<Option<CommandChild>>);
+
+/// Append a line to the sidecar log so backend-launch problems on a customer
+/// machine are diagnosable even if Python never starts (missing runtime DLL,
+/// antivirus block, etc. — cases the Python-level backend.log can't capture).
+fn log_line(path: &PathBuf, msg: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{msg}");
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +34,11 @@ pub fn run() {
                 .join("ChefOS");
             std::fs::create_dir_all(&data_dir).ok();
             let db_path = data_dir.join("chefos.db");
+            let log_path = data_dir.join("sidecar.log");
+
+            // Fresh log each launch (keeps it small + relevant to this run).
+            let _ = std::fs::write(&log_path, b"=== ChefOS sidecar log ===\n");
+            log_line(&log_path, "[tauri] launching backend sidecar…");
 
             // Start the bundled FastAPI backend silently in the background.
             let sidecar = app
@@ -44,7 +60,19 @@ pub fn run() {
                 .env("CHEFOS_GOOGLE_CLIENT_ID", option_env!("CHEFOS_GOOGLE_CLIENT_ID").unwrap_or(""))
                 .env("CHEFOS_GOOGLE_CLIENT_SECRET", option_env!("CHEFOS_GOOGLE_CLIENT_SECRET").unwrap_or(""));
 
-            let (mut rx, child) = sidecar.spawn().expect("failed to start ChefOS backend");
+            // If the .exe itself can't launch (missing runtime, AV block), record
+            // it instead of crashing silently — this is the key diagnostic.
+            let spawned = sidecar.spawn();
+            let (mut rx, child) = match spawned {
+                Ok(pair) => pair,
+                Err(e) => {
+                    log_line(&log_path, &format!("[tauri] FAILED to start backend: {e}"));
+                    // Don't crash the window — the UI shows a clear 'couldn't start'
+                    // screen and points the chef at this log file.
+                    return Ok(());
+                }
+            };
+            log_line(&log_path, "[tauri] backend process started; draining output…");
 
             app.state::<BackendProcess>()
                 .0
@@ -52,13 +80,27 @@ pub fn run() {
                 .unwrap()
                 .replace(child);
 
-            // Drain the backend's output so its pipe never blocks; also useful for logs.
+            // Drain the backend's output so its pipe never blocks, and mirror it to
+            // the log file (captures crashes + exit codes on the customer machine).
+            let log_for_task = log_path.clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => {
                             let line = String::from_utf8_lossy(&bytes);
-                            print!("[backend] {line}");
+                            let line = line.trim_end();
+                            if !line.is_empty() {
+                                log_line(&log_for_task, &format!("[backend] {line}"));
+                            }
+                        }
+                        CommandEvent::Terminated(payload) => {
+                            log_line(
+                                &log_for_task,
+                                &format!("[tauri] backend EXITED code={:?} signal={:?}", payload.code, payload.signal),
+                            );
+                        }
+                        CommandEvent::Error(err) => {
+                            log_line(&log_for_task, &format!("[tauri] backend pipe error: {err}"));
                         }
                         _ => {}
                     }
