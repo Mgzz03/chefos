@@ -22,6 +22,8 @@ class IngredientCreate(BaseModel):
     category_id: Optional[str] = None
     supplier: Optional[str] = ""
     threshold: Optional[float] = 0
+    parent_ingredient_id: Optional[str] = None
+    units_per_parent: Optional[float] = 1
 
 class IngredientOut(BaseModel):
     id: str
@@ -33,6 +35,8 @@ class IngredientOut(BaseModel):
     supplier: Optional[str] = ""
     threshold: float
     stock: float
+    parent_ingredient_id: Optional[str] = None
+    units_per_parent: Optional[float] = 1
     class Config:
         from_attributes = True
 

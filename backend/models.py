@@ -28,15 +28,25 @@ class Ingredient(Base):
     user_id          = Column(String, nullable=False)
     price_updated_at = Column(DateTime, server_default=func.now())
     created_at       = Column(DateTime, server_default=func.now())
+    # Derived ingredient (e.g. "Egg yolk") that draws from a parent ("Egg").
+    # units_per_parent = how many of THIS ingredient's units come from 1 parent
+    # unit (1 yolk per egg → 1; ~33 g of white per egg → 33). Stock + deductions
+    # flow through the parent so the real inventory (eggs) is what changes.
+    parent_ingredient_id = Column(String, ForeignKey("ingredients.id"), nullable=True)
+    units_per_parent     = Column(Float, default=1)
 
     category_rel = relationship("Category", back_populates="ingredients")
     batches      = relationship("InventoryBatch", back_populates="ingredient",
                                 cascade="all, delete-orphan",
                                 order_by="InventoryBatch.expiry_date")
     recipe_ings  = relationship("RecipeIngredient", back_populates="ingredient_rel")
+    parent_rel   = relationship("Ingredient", remote_side=[id])
 
     @property
     def stock(self):
+        # A derived ingredient's available stock comes from its parent.
+        if self.parent_ingredient_id and self.parent_rel is not None:
+            return self.parent_rel.stock * (self.units_per_parent or 1)
         return sum(b.quantity for b in self.batches if not b.is_depleted)
 
     @property

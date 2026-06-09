@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import * as api from './api'
 import { flushOfflineQueue } from './api'
+import { fmtDate, fmtDateTime, fmtDateLong, fmtUnixDate, fmtUnixDateTime } from './datefmt'
 import { checkForUpdate } from './updater'
 import { supabase } from './supabase'
 import QRCode from 'qrcode'
@@ -41,7 +42,7 @@ export function expiryLabel(dateStr) {
     if (days === 0) return { label: 'Expires today!', cls: 'expiry-critical', status: 'critical' }
     if (days <= 3) return { label: `${days}d left`, cls: 'expiry-critical', status: 'critical' }
     if (days <= 7) return { label: `${days}d left`, cls: 'expiry-warning', status: 'warning' }
-    return { label: `Exp ${dateStr}`, cls: 'expiry-ok', status: 'ok' }
+    return { label: `Exp ${fmtDate(dateStr)}`, cls: 'expiry-ok', status: 'ok' }
 }
 
 export const CATEGORY_COLORS = [
@@ -414,7 +415,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
         catch { setGdMsg('Restore failed.') }
         setGdBusy(false)
     }
-    const fmtDT = (u) => u ? new Date(u * 1000).toLocaleString() : 'never'
+    const fmtDT = fmtUnixDateTime
 
     const fileToB64 = (file) => new Promise((res, rej) => {
         const r = new FileReader()
@@ -459,7 +460,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
         catch (e) { console.error(e) }
         setMBusy(false)
     }
-    const fmt = (u) => u ? new Date(u * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+    const fmt = fmtUnixDate
     const Row = ({ label, value }) => (
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
             <span style={{ color: 'var(--ink-mute, #7a6f5a)' }}>{label}</span>
@@ -943,7 +944,7 @@ export default function App() {
                     <div>
                         <div className="topbar-title">{page === 'ai' ? (branding.assistant_name || 'Mgzz Assistant') : (pageTitles[page] || page)}</div>
                         <div className="topbar-sub">
-                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            {fmtDateLong(new Date())}
                         </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1028,7 +1029,7 @@ function Dashboard({ ingredients, recipes, alerts, events, wasteCost, wasteCount
                     <strong>Chef 👨‍🍳</strong>
                 </div>
                 <div className="dash-hero-date">
-                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    {fmtDateLong(new Date())}
                 </div>
             </div>
 
@@ -1213,7 +1214,7 @@ function CategoriesPage({ categories, onReload }) {
 function IngredientsPage({ ingredients, categories, onReload }) {
     const [modal, setModal] = useState(false)
     const [editing, setEditing] = useState(null)
-    const [form, setForm] = useState({ name: '', unit: 'g', cost: '', category_id: '', supplier: '', threshold: '' })
+    const [form, setForm] = useState({ name: '', unit: 'g', cost: '', category_id: '', supplier: '', threshold: '', parent_ingredient_id: '', units_per_parent: 1 })
     const [newCatName, setNewCatName] = useState('')
     const [creatingCat, setCreatingCat] = useState(false)
     const [error, setError] = useState('')
@@ -1222,8 +1223,8 @@ function IngredientsPage({ ingredients, categories, onReload }) {
 
     const open = (ing = null) => {
         setEditing(ing)
-        setForm(ing ? { name: ing.name, unit: ing.unit, cost: ing.cost, category_id: ing.category_id || '', supplier: ing.supplier || '', threshold: ing.threshold }
-            : { name: '', unit: 'g', cost: '', category_id: '', supplier: '', threshold: '' })
+        setForm(ing ? { name: ing.name, unit: ing.unit, cost: ing.cost, category_id: ing.category_id || '', supplier: ing.supplier || '', threshold: ing.threshold, parent_ingredient_id: ing.parent_ingredient_id || '', units_per_parent: ing.units_per_parent || 1 }
+            : { name: '', unit: 'g', cost: '', category_id: '', supplier: '', threshold: '', parent_ingredient_id: '', units_per_parent: 1 })
         setError(''); setNewCatName(''); setCreatingCat(false); setModal(true)
     }
     const createCatInline = async () => {
@@ -1237,7 +1238,8 @@ function IngredientsPage({ ingredients, categories, onReload }) {
     }
     const save = async () => {
         if (!form.name.trim() || !form.cost) { setError('Name and cost are required'); return }
-        const payload = { ...form, cost: parseFloat(form.cost), threshold: parseFloat(form.threshold) || 0, category_id: form.category_id || null }
+        const payload = { ...form, cost: parseFloat(form.cost), threshold: parseFloat(form.threshold) || 0, category_id: form.category_id || null,
+            parent_ingredient_id: form.parent_ingredient_id || null, units_per_parent: parseFloat(form.units_per_parent) || 1 }
         try {
             if (editing) await api.updateIngredient(editing.id, payload)
             else await api.createIngredient(payload)
@@ -1330,6 +1332,27 @@ function IngredientsPage({ ingredients, categories, onReload }) {
                                 <input className="form-input" style={{ flex: 1 }} value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" autoFocus onKeyDown={e => e.key === 'Enter' && createCatInline()} />
                                 <button className="btn btn-primary btn-sm" onClick={createCatInline}>Create</button>
                                 <button className="btn btn-sm" onClick={() => setCreatingCat(false)}>Cancel</button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Derived from another ingredient (optional)</label>
+                        <select className="form-select" value={form.parent_ingredient_id}
+                            onChange={e => setForm({ ...form, parent_ingredient_id: e.target.value })}>
+                            <option value="">— None (normal stocked ingredient) —</option>
+                            {ingredients.filter(i => !i.parent_ingredient_id && (!editing || i.id !== editing.id))
+                                .map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        {form.parent_ingredient_id && (
+                            <div style={{ marginTop: 8 }}>
+                                <label className="form-label">How many of this come from 1 {ingredients.find(i => i.id === form.parent_ingredient_id)?.name || 'parent'}?</label>
+                                <input className="form-input" type="number" step="0.01" min="0.01"
+                                    value={form.units_per_parent}
+                                    onChange={e => setForm({ ...form, units_per_parent: e.target.value })} />
+                                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                    e.g. 1 egg yolk per egg → enter <b>1</b>. This has no stock of its own —
+                                    using it in a recipe deducts from <b>{ingredients.find(i => i.id === form.parent_ingredient_id)?.name || 'the parent'}</b>.
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1600,7 +1623,7 @@ function InventoryPage({ ingredients, categories, onReload }) {
                 <Modal onClose={() => setExpiredModal(null)}>
                     <div className="modal-title">Expired Batch — {expiredModal.ing.name}</div>
                     <div className="alert-strip danger" style={{ marginBottom: 14 }}>
-                        ⚠ Expired on <b>{expiredModal.batch.expiry_date}</b>. Cannot be used.
+                        ⚠ Expired on <b>{fmtDate(expiredModal.batch.expiry_date)}</b>. Cannot be used.
                     </div>
                     <div className="form-group">
                         <label className="form-label">How to handle?</label>

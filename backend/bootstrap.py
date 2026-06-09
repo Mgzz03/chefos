@@ -44,3 +44,11 @@ def ensure_local_schema(engine) -> None:
             rcols = {c["name"] for c in inspector.get_columns("recipes")}
             if "profit_margin" not in rcols:
                 conn.execute(text("ALTER TABLE recipes ADD COLUMN profit_margin REAL"))
+
+        # Derived ingredients (e.g. Egg yolk → Egg) added after initial release
+        if "ingredients" in existing_tables:
+            icols = {c["name"] for c in inspector.get_columns("ingredients")}
+            if "parent_ingredient_id" not in icols:
+                conn.execute(text("ALTER TABLE ingredients ADD COLUMN parent_ingredient_id TEXT"))
+            if "units_per_parent" not in icols:
+                conn.execute(text("ALTER TABLE ingredients ADD COLUMN units_per_parent REAL DEFAULT 1"))

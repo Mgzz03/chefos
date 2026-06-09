@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import * as api from './api'
 import { Modal, stockStatus, uid } from './App'
+import { fmtDate, fmtDateTime } from './datefmt'
 
 // ─────────────────────────────────────────────────────────
 // RECIPES
@@ -215,7 +216,7 @@ export function Simulate({ ingredients, recipes, onReload, initialRecipeId, addT
           expiry_date: expiryDate || null,
           notes: stockNotes || null
         })
-        setDone({success:true, msg:`✓ Stored! ${res.data.quantity} ${res.data.unit} of ${recipe?.name} added to Cooked Stock.${res.data.expiry_date?` Expires ${res.data.expiry_date}`:''} Cost: EGP ${res.data.total_cost?.toFixed(2)}`})
+        setDone({success:true, msg:`✓ Stored! ${res.data.quantity} ${res.data.unit} of ${recipe?.name} added to Cooked Stock.${res.data.expiry_date?` Expires ${fmtDate(res.data.expiry_date)}`:''} Cost: EGP ${res.data.total_cost?.toFixed(2)}`})
       } else {
         await api.executeCook({recipe_id:recipeId, scale_factor:scale, portions})
         addToHistory({id:uid(), recipeId, recipeName:recipe?.name, category:recipe?.category,
@@ -567,7 +568,7 @@ export function HistoryPage({ history, onCancel, onDelete, onClearAll, onClearFi
                         {h.portions} {isAssembly?(h.yield_unit||'pieces'):'portions'}
                         {h.scale && ` · scale ${h.scale.toFixed(2)}×`}
                         {` · cost $${h.cost?.toFixed(2)}`}
-                        {` · ${new Date(h.cookedAt).toLocaleString()}`}
+                        {` · ${fmtDateTime(h.cookedAt)}`}
                       </div>
                     </div>
 
@@ -636,7 +637,7 @@ export function HistoryPage({ history, onCancel, onDelete, onClearAll, onClearFi
           </div>
           <div style={{background:'var(--warm)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
             {cancelModal.portions} {(cancelModal.type||'cook') === 'assembly' ? 'pieces' : 'portions'} ·
-            ${cancelModal.cost?.toFixed(2)} · {new Date(cancelModal.cookedAt).toLocaleDateString()}
+            ${cancelModal.cost?.toFixed(2)} · {fmtDate(cancelModal.cookedAt)}
           </div>
           <div className="form-group">
             <label className="form-label">What should happen to the used stock?</label>
@@ -845,7 +846,7 @@ export function AIAssistantPage({ ingredients, recipes, items, events, alerts, s
 // Print / Save-as-PDF any answer (uses a hidden iframe so it works inside the app)
 function printDoc(title, text, brand) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const when = new Date().toLocaleString()
+  const when = fmtDateTime(new Date())
   let saved = ''
   try { saved = localStorage.getItem('chefos_brand') || '' } catch (e) {}
   const name = brand || saved || 'ChefOS'

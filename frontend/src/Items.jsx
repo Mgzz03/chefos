@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import * as api from './api'
 import { Modal, expiryLabel, uid } from './App'
+import { fmtDate, fmtDateTime } from './datefmt'
 
 // ─────────────────────────────────────────────────────────
 // ITEMS PAGE
@@ -407,7 +408,7 @@ export function CookedStockPage({ onReload }) {
                       {cs.expiry_status==='critical'&&<span className="badge badge-critical">CRITICAL</span>}
                       {cs.expiry_status==='warning'&&<span className="badge badge-warn">Expiring soon</span>}
                     </div>
-                    <div className="row-meta">Cost: EGP {cs.cost_snapshot?.toFixed(2)} · {cs.created_at?new Date(cs.created_at).toLocaleDateString():'—'}{cs.notes?` · ${cs.notes}`:''}</div>
+                    <div className="row-meta">Cost: EGP {cs.cost_snapshot?.toFixed(2)} · 🕒 {fmtDateTime(cs.created_at)}{cs.notes?` · ${cs.notes}`:''}</div>
                   </div>
                   <button className="btn btn-sm btn-danger" onClick={()=>{setWasteModal(cs);setReason('expired')}}>🗑 Waste</button>
                 </div>
@@ -545,7 +546,7 @@ export function WastePage() {
                   <span className="badge" style={{background:(reasonColor[w.reason]||'var(--slate)')+'22',color:reasonColor[w.reason]||'var(--slate)'}}>{w.reason}</span>
                   <span className="badge badge-out">EGP {w.cost_lost?.toFixed(2)} lost</span>
                 </div>
-                <div className="row-meta">{w.quantity} {w.unit} · {w.source_type==='cooked_stock'?'cooked stock':'ingredient batch'} · {w.created_at?new Date(w.created_at).toLocaleString():''}</div>
+                <div className="row-meta">{w.quantity} {w.unit} · {w.source_type==='cooked_stock'?'cooked stock':'ingredient batch'} · {fmtDateTime(w.created_at)}</div>
               </div>
               <button className="btn btn-sm btn-danger" onClick={()=>del(w.id)}>Remove entry</button>
             </div>

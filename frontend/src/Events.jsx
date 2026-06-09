@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import * as api from './api'
 import { Modal, uid } from './App'
+import { fmtDate } from './datefmt'
 
 // ─────────────────────────────────────────────────────────
 // VENDORS
@@ -379,7 +380,7 @@ export function EventsPage({ events, recipes, items = [], setupItems, ingredient
                 <span className={`badge ${statusBadge[ev.status]||'badge-gold'}`}>{ev.status}</span>
               </div>
               <div className="row-meta">
-                {ev.event_date && `📅 ${ev.event_date} · `}
+                {ev.event_date && `📅 ${fmtDate(ev.event_date)} · `}
                 ⏱ {ev.duration_hrs}h · 👥 {ev.guest_count} guests ·
                 {ev.recipes.length} recipe{ev.recipes.length!==1?'s':''} ·
                 {(ev.items?.length||0)} item{(ev.items?.length||0)!==1?'s':''} ·

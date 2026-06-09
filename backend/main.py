@@ -259,7 +259,10 @@ def ingredient_to_dict(ing: Ingredient) -> dict:
         "category_color": ing.category_rel.color if ing.category_rel else "#888",
         "supplier": ing.supplier,
         "threshold": ing.threshold,
-        "stock": sum(b.quantity for b in ing.batches if not b.is_depleted),
+        "stock": ing.stock,
+        "parent_ingredient_id": ing.parent_ingredient_id,
+        "units_per_parent": ing.units_per_parent or 1,
+        "parent_name": ing.parent_rel.name if ing.parent_ingredient_id and ing.parent_rel else None,
         "batches": [
             {
                 "id": b.id,
@@ -288,6 +291,12 @@ def expiry_status(expiry_date) -> str:
     return "ok"
 
 def deduct_fifo(db: Session, ingredient_id: str, amount: float):
+    # Derived ingredient (e.g. Egg yolk) → consume from its parent (Egg) instead,
+    # converting units: `amount` derived units need amount / units_per_parent parents.
+    ing = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if ing and ing.parent_ingredient_id:
+        factor = ing.units_per_parent or 1
+        return deduct_fifo(db, ing.parent_ingredient_id, amount / factor)
     batches = (db.query(InventoryBatch)
                .filter(InventoryBatch.ingredient_id == ingredient_id,
                        InventoryBatch.is_depleted == False)
@@ -377,6 +386,8 @@ def create_ingredient(data: IngredientCreate, db: Session = Depends(get_db), use
     ing = Ingredient(id=new_id(), name=data.name, unit=data.unit,
                      cost=data.cost, category_id=data.category_id,
                      supplier=data.supplier, threshold=data.threshold,
+                     parent_ingredient_id=data.parent_ingredient_id or None,
+                     units_per_parent=data.units_per_parent or 1,
                      user_id=user_id)
     db.add(ing); db.commit()
     ing = (db.query(Ingredient)
@@ -393,6 +404,8 @@ def update_ingredient(ing_id: str, data: IngredientCreate, db: Session = Depends
     ing.name = data.name; ing.unit = data.unit; ing.cost = data.cost
     ing.category_id = data.category_id; ing.supplier = data.supplier
     ing.threshold = data.threshold
+    ing.parent_ingredient_id = data.parent_ingredient_id or None
+    ing.units_per_parent = data.units_per_parent or 1
     if price_changed:
         from sqlalchemy.sql import func as sqlfunc
         ing.price_updated_at = sqlfunc.now()
@@ -522,6 +535,8 @@ def get_alerts(db: Session = Depends(get_db), user_id: str = Depends(get_current
     alerts = []
     today = date.today()
     for ing in ings:
+        if ing.parent_ingredient_id:
+            continue  # derived ingredients (egg yolk/white) alert via their parent
         stock = sum(b.quantity for b in ing.batches if not b.is_depleted)
         if stock <= 0:
             alerts.append({"type": "out", "ingredient": ing.name, "stock": 0, "unit": ing.unit})
@@ -623,7 +638,7 @@ def simulate(recipe_id: str, scale: float = 1.0, db: Session = Depends(get_db), 
         if not ing:
             continue
         needed = ri.qty * scale
-        stock = sum(b.quantity for b in ing.batches if not b.is_depleted)
+        stock = ing.stock
         if stock < needed:
             all_ok = False
             issues.append({"name": ing.name, "needed": needed, "have": stock, "unit": ri.unit})
@@ -639,7 +654,7 @@ def cook(req: CookRequest, db: Session = Depends(get_db), user_id: str = Depends
         ing = (db.query(Ingredient).options(joinedload(Ingredient.batches))
                .filter(Ingredient.id == ri.ingredient_id, Ingredient.user_id == user_id).first())
         if ing:
-            stock = sum(b.quantity for b in ing.batches if not b.is_depleted)
+            stock = ing.stock
             if stock < ri.qty * req.scale_factor:
                 raise HTTPException(422, f"Insufficient stock: {ing.name}")
     for ri in r.ingredients:
@@ -958,7 +973,7 @@ def cook_to_stock(req: CookToStockRequest, db: Session = Depends(get_db), user_i
         ing = (db.query(Ingredient).options(joinedload(Ingredient.batches))
                .filter(Ingredient.id == ri.ingredient_id, Ingredient.user_id == user_id).first())
         if ing:
-            stock = sum(b.quantity for b in ing.batches if not b.is_depleted)
+            stock = ing.stock
             if stock < ri.qty * req.scale_factor:
                 raise HTTPException(422, f"Insufficient stock: {ing.name}")
     total_cost = 0
