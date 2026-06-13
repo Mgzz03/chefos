@@ -61,14 +61,21 @@ def main() -> None:
         print("!! WARNING: frontend/dist not found — Mobile Access won't serve the app.")
         print("   Run `npm run build:desktop` in frontend/ first, then re-run this.")
 
-    print(f"==> Building sidecar for {triple} ...")
+    print(f"==> Building sidecar (one-folder) for {triple} ...")
+    # --onedir (NOT --onefile): a one-file exe unpacks its whole Python runtime to
+    # a temp dir on EVERY launch, which antivirus on a locked-down customer machine
+    # scans/blocks — the backend then hangs before it ever starts (no backend.log).
+    # One-folder ships the runtime unpacked next to the exe, so it starts instantly
+    # and triggers far less AV. The whole folder is bundled as a Tauri resource and
+    # spawned directly from there (see src-tauri/src/lib.rs).
     subprocess.run(
         [
             sys.executable, "-m", "PyInstaller",
-            "--onefile",
+            "--onedir",
             "--name", "chefos-backend",
             "--noconfirm",
             "--clean",
+            "--console",
             *add_data,
             # FastAPI/uvicorn/sqlalchemy/pydantic pull in modules dynamically;
             # collect them whole so nothing is missing at runtime.
@@ -83,15 +90,17 @@ def main() -> None:
         check=True,
     )
 
-    src = ROOT / "dist" / f"chefos-backend{ext}"
-    if not src.exists():
-        sys.exit(f"Expected build output not found: {src}")
+    src_dir = ROOT / "dist" / "chefos-backend"          # folder with the exe + _internal/
+    if not (src_dir / f"chefos-backend{ext}").exists():
+        sys.exit(f"Expected build output not found: {src_dir}")
 
-    dst_dir = ROOT.parent / "frontend" / "src-tauri" / "binaries"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    dst = dst_dir / f"chefos-backend-{triple}{ext}"
-    shutil.copy2(src, dst)
-    print(f"==> Sidecar ready: {dst}")
+    # Bundle the whole folder as a Tauri resource (preserved verbatim in the app).
+    dst_dir = ROOT.parent / "frontend" / "src-tauri" / "backend-dist" / "chefos-backend"
+    if dst_dir.exists():
+        shutil.rmtree(dst_dir)
+    dst_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src_dir, dst_dir)
+    print(f"==> Sidecar (folder) ready: {dst_dir}")
 
 
 if __name__ == "__main__":

@@ -54,3 +54,5 @@ updater-private.key.pub
 
 # Generated per-release (upload to GitHub, do not commit)
 latest.json
+
+frontend/src-tauri/backend-dist/
