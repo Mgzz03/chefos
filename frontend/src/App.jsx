@@ -371,6 +371,7 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
     }
     const [bks, setBks] = useState([])
     const [bMsg, setBMsg] = useState('')
+    const [bkName, setBkName] = useState('')
     const fileRef = useRef(null)
     const [gd, setGd] = useState(null)
     const [gdFiles, setGdFiles] = useState([])
@@ -423,6 +424,18 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
         r.onerror = rej
         r.readAsDataURL(file)
     })
+    const doCreateBackup = async () => {
+        setBMsg('Saving backup…')
+        try {
+            const { data } = await api.createBackup(bkName.trim())
+            if (data.ok) { setBkName(''); loadBackups(); setBMsg(`✓ Backup saved${bkName.trim() ? ` ("${bkName.trim()}")` : ''}.`) }
+            else setBMsg(`Error: ${data.error}`)
+        } catch { setBMsg('Backup failed.') }
+    }
+    const doOpenFolder = async () => {
+        try { const { data } = await api.openBackupsFolder(); if (data && data.path) setBMsg(`📂 Backups folder: ${data.path}`) }
+        catch { setBMsg('Could not open the backups folder.') }
+    }
     const doExport = async () => {
         setBMsg('Exporting…')
         try { const { data } = await api.exportBackup(); setBMsg(data.ok ? `✓ Saved to ${data.path}` : `Error: ${data.error}`) }
@@ -577,27 +590,58 @@ function SettingsPage({ licenseInfo, onDeactivate, onReload, branding, onBrandin
             <div className="card" style={{ padding: 24 }}>
                 <h3 style={{ marginTop: 0, marginBottom: 6 }}>Backups</h3>
                 <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13, marginTop: 0 }}>
-                    A backup is saved automatically every day (the last 30 are kept).
+                    A backup is saved automatically every day. You can also save your own
+                    backup any time and give it a name so you remember what it is. Every
+                    backup is kept in the <b>backups folder</b> on this computer — restoring
+                    one never deletes the others (it even saves your current data first).
                 </p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <button onClick={doExport}
+
+                {/* Save a named backup */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                    <input
+                        value={bkName} onChange={e => setBkName(e.target.value)}
+                        placeholder="Name this backup (e.g. before menu change)"
+                        onKeyDown={e => e.key === 'Enter' && doCreateBackup()}
+                        style={{ flex: '1 1 240px', minWidth: 180, padding: '10px 12px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', fontSize: 14 }} />
+                    <button onClick={doCreateBackup}
                         style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: '#6C0B25', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
-                        Export Backup → Desktop
+                        Save backup now
                     </button>
-                    <button onClick={() => fileRef.current && fileRef.current.click()}
-                        style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #6C0B25', background: 'transparent', color: '#6C0B25', fontWeight: 600, cursor: 'pointer' }}>
-                        Restore from a .zip file…
-                    </button>
-                    <input ref={fileRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={doRestoreFile} />
                 </div>
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <button onClick={doOpenFolder}
+                        style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, cursor: 'pointer' }}>
+                        📂 Open backups folder
+                    </button>
+                    <button onClick={() => { doOpenFolder(); fileRef.current && fileRef.current.click() }}
+                        style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid #6C0B25', background: 'transparent', color: '#6C0B25', fontWeight: 600, cursor: 'pointer' }}>
+                        Restore from a file…
+                    </button>
+                    <button onClick={doExport}
+                        style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--line, #e3dcc4)', background: 'transparent', color: '#7a6f5a', fontWeight: 600, cursor: 'pointer' }}>
+                        Export a copy (.zip) to Desktop
+                    </button>
+                    <input ref={fileRef} type="file" accept=".db,.zip" style={{ display: 'none' }} onChange={doRestoreFile} />
+                </div>
+                <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+                    A <b>.zip</b> is a single compressed file holding one backup — handy to email
+                    to yourself or copy to a USB stick to keep a copy <i>off</i> this computer.
+                    “Restore from a file” opens your backups folder so you can pick one (a <b>.db</b>
+                    backup or an exported <b>.zip</b>).
+                </p>
+
                 {bMsg && <div style={{ fontSize: 13, padding: '8px 12px', background: 'var(--cream, #faf7e7)', borderRadius: 8, marginBottom: 12, wordBreak: 'break-all' }}>{bMsg}</div>}
-                <div style={{ maxHeight: 230, overflow: 'auto' }}>
+                <div style={{ maxHeight: 240, overflow: 'auto' }}>
                     {bks.length === 0
                         ? <p style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 13 }}>No backups yet.</p>
                         : bks.map((b) => (
                             <div key={b.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--line, #e3dcc4)' }}>
-                                <span>{b.date} <span style={{ color: 'var(--ink-mute, #7a6f5a)', fontSize: 12 }}>· {(b.size / 1024).toFixed(0)} KB</span></span>
-                                <button onClick={() => doRestore(b.name, b.date)}
+                                <span style={{ fontSize: 13 }}>
+                                    <b>{b.label}</b>
+                                    <span style={{ color: 'var(--ink-mute, #7a6f5a)' }}> · {fmtDateTime(b.modified * 1000)} · {(b.size / 1024).toFixed(0)} KB</span>
+                                </span>
+                                <button onClick={() => doRestore(b.name, `${b.label} (${fmtDateTime(b.modified * 1000)})`)}
                                     style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--line, #e3dcc4)', background: '#efe9d6', color: '#2E1A0E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                                     Restore
                                 </button>

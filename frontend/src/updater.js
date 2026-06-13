@@ -23,9 +23,15 @@ export async function checkForUpdate({ silent = true } = {}) {
         const { relaunch } = await import('@tauri-apps/plugin-process')
         await relaunch()
     } catch (e) {
-        // No internet, no release published yet, or signature mismatch — ignore.
-        if (!silent) window.alert('Could not check for updates right now.')
+        // No internet, blocked network (GitHub unreachable), or signature mismatch.
+        const msg = (e?.message || String(e) || '').slice(0, 300)
+        if (!silent) window.alert(
+            'Could not check for updates right now.\n\n' +
+            'This usually means this computer can\'t reach the update server ' +
+            '(github.com) — often a workplace/school network or firewall blocking it.\n\n' +
+            'Details: ' + (msg || 'unknown error')
+        )
         // eslint-disable-next-line no-console
-        console.debug('update check skipped:', e?.message || e)
+        console.debug('update check failed:', msg)
     }
 }

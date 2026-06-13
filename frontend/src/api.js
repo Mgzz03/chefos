@@ -91,6 +91,8 @@ export const toggleMobile    = (enabled) => api.post('/mobile/toggle', { enabled
 
 // ── Backups ────────────────────────────────────────────────
 export const listBackups   = ()        => api.get('/backup/list')
+export const createBackup  = (name)    => api.post('/backup/create', { name })
+export const openBackupsFolder = ()    => api.post('/backup/open-folder')
 export const exportBackup  = ()        => api.post('/backup/export')
 export const restoreBackup = (name)    => api.post('/backup/restore', { name })
 export const restoreUpload = (zip_b64) => api.post('/backup/restore-upload', { zip_b64 })

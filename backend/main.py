@@ -148,6 +148,16 @@ def backup_list():
     return {"backups": backups.list_backups()}
 
 
+@app.post("/backup/create")
+def backup_create(body: dict):
+    return backups.create_named_backup(body.get("name", ""))
+
+
+@app.post("/backup/open-folder")
+def backup_open_folder():
+    return backups.open_backups_folder()
+
+
 @app.post("/backup/export")
 def backup_export():
     return backups.export_to_desktop()
