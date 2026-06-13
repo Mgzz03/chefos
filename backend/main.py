@@ -1270,6 +1270,7 @@ import sys as _sys
 import socket as _socket
 import json as _json
 from fastapi import Request as _Request
+from fastapi import Response as _Response
 from fastapi.responses import JSONResponse as _JSONResponse
 
 
@@ -1316,6 +1317,31 @@ async def _lan_guard(request: _Request, call_next):
             status_code=403,
         )
     return await call_next(request)
+
+
+# Added LAST so it runs OUTERMOST (before _lan_guard and CORS).
+# The packaged desktop app's webview (origin tauri.localhost / https://tauri.localhost)
+# treats a call to 127.0.0.1 as a "private network" request and sends a CORS
+# preflight that MUST be answered with `Access-Control-Allow-Private-Network: true`.
+# FastAPI's CORS middleware doesn't send that header (and the preflight here was
+# returning 400), so the packaged app couldn't reach its own backend even though
+# the backend was healthy. Answer the preflight ourselves and tag every response.
+@app.middleware("http")
+async def _private_network_cors(request: _Request, call_next):
+    origin = request.headers.get("origin", "*")
+    if request.method == "OPTIONS":
+        return _Response(status_code=200, headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, PUT, OPTIONS",
+            "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Private-Network": "true",
+            "Access-Control-Max-Age": "600",
+            "Vary": "Origin",
+        })
+    resp = await call_next(request)
+    resp.headers["Access-Control-Allow-Private-Network"] = "true"
+    return resp
 
 
 @app.get("/mobile/status")
